@@ -28,6 +28,29 @@
   color: var(--color-text-muted);
   font-weight: 600;
   border-bottom: 1px solid var(--color-surface-border);
+  user-select: none;
+}
+
+.course-list__th {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.course-list__th:hover {
+  color: var(--color-text-primary);
+}
+
+.course-list__th--right {
+  text-align: right;
+}
+
+.course-list__sort-icon {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-disabled);
+}
+
+.course-list__th:hover .course-list__sort-icon {
+  color: var(--color-text-muted);
 }
 
 .course-list__row td {
@@ -45,6 +68,10 @@
   text-align: right;
   color: var(--color-accent-cyan);
   font-variant-numeric: tabular-nums;
+}
+
+.course-list__count--low {
+  color: var(--color-accent-red);
 }
 
 .course-list__row--clickable {

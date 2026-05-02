@@ -96,7 +96,7 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
     <div className="node node--collection">
       <div className="node__header">
         <span>Course Collection</span>
-        {studentCount !== null && <span className="node__count">{studentCount}</span>}
+        {studentCount !== null && <span className={`node__count${studentCount < 10 ? ' node__count--low' : ''}`}>{studentCount}</span>}
         <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
           {expanded ? '▲' : '▼'}
         </button>

@@ -171,6 +171,10 @@
   font-weight: 400;
 }
 
+.node__count--low {
+  color: var(--color-accent-red);
+}
+
 .node__expand-btn {
   flex-shrink: 0;
   padding: 0 var(--space-1);

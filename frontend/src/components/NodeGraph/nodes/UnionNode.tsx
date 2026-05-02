@@ -26,7 +26,7 @@ export function UnionNode({ id }: NodeProps) {
     <div className="node node--aggregation">
       <div className="node__header">
         <span>Union</span>
-        {studentCount !== null && <span className="node__count">{studentCount}</span>}
+        {studentCount !== null && <span className={`node__count${studentCount < 10 ? ' node__count--low' : ''}`}>{studentCount}</span>}
         <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
           {expanded ? '▲' : '▼'}
         </button>
