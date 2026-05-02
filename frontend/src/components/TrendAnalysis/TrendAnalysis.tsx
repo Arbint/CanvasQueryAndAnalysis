@@ -1,13 +1,54 @@
-import { useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react'
 import { api } from '../../api/client'
 import type { Course, Student } from '../../api/types'
+import { union } from '../../lib/setOperations'
 import { useAppStore } from '../../store/appStore'
 import { downloadCSV, emailsString } from '../StudentList/exportUtils'
 import './TrendAnalysis.css'
 
+// --- Collection filter utilities (same logic as CourseCollectionNode) ---
+
+function parseDepartment(courseCode: string): string {
+  return courseCode.match(/^[A-Za-z]+/)?.[0]?.toUpperCase() ?? ''
+}
+
+function parseCourseNumber(courseCode: string): string {
+  return courseCode.match(/\d{4}/)?.[0] ?? courseCode.match(/\d+/)?.[0] ?? ''
+}
+
+function matchesWildcard(pattern: string, value: string): boolean {
+  const regexStr = [...pattern]
+    .map((c) => (c === '*' ? '.' : c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    .join('')
+  return new RegExp(`^${regexStr}$`).test(value)
+}
+
+function courseMatchesFilters(
+  course: Course,
+  selectedTerms: string[],
+  department: string,
+  numberPattern: string,
+): boolean {
+  if (selectedTerms.length > 0 && !selectedTerms.includes(course.term_name)) return false
+  if (department && parseDepartment(course.course_code) !== department.trim().toUpperCase()) return false
+  if (numberPattern.trim() && !matchesWildcard(numberPattern.trim(), parseCourseNumber(course.course_code))) return false
+  return true
+}
+
+// --- Types ---
+
+interface CollectionFilters {
+  selectedTerms: string[]
+  department: string
+  numberPattern: string
+}
+
 interface TrendColumn {
   id: string
+  mode: 'course' | 'collection'
   courseId: number | null
+  collection: CollectionFilters
+  matchedCourseCount: number
   loading: boolean
   error: string | null
   students: Student[]
@@ -31,20 +72,159 @@ const compareLabels: Record<CompareKind, string> = {
 let trendColumnCounter = 0
 const nextColumnId = () => `trend-column-${++trendColumnCounter}`
 
+const makeColumn = (): TrendColumn => ({
+  id: nextColumnId(),
+  mode: 'course',
+  courseId: null,
+  collection: { selectedTerms: [], department: '', numberPattern: '' },
+  matchedCourseCount: 0,
+  loading: false,
+  error: null,
+  students: [],
+  width: 240,
+})
+
+// --- Null-rendering sync component for collection columns ---
+
+function CollectionSync({
+  columnId,
+  filters,
+  setColumns,
+}: {
+  columnId: string
+  filters: CollectionFilters
+  setColumns: Dispatch<SetStateAction<TrendColumn[]>>
+}) {
+  const courses = useAppStore((s) => s.courses)
+  const cacheRef = useRef<Record<number, Student[]>>({})
+
+  const matchedCourses = useMemo(
+    () => courses.filter((c) => courseMatchesFilters(c, filters.selectedTerms, filters.department, filters.numberPattern)),
+    [courses, filters.selectedTerms, filters.department, filters.numberPattern],
+  )
+
+  useEffect(() => {
+    const missing = matchedCourses.filter((c) => !(c.id in cacheRef.current))
+    const matchedCourseCount = matchedCourses.length
+
+    if (missing.length === 0) {
+      const students = matchedCourses.length > 0 ? union(...matchedCourses.map((c) => cacheRef.current[c.id] ?? [])) : []
+      setColumns((cols) =>
+        cols.map((col) =>
+          col.id === columnId && col.mode === 'collection'
+            ? { ...col, students, matchedCourseCount, loading: false }
+            : col,
+        ),
+      )
+      return
+    }
+
+    setColumns((cols) =>
+      cols.map((col) =>
+        col.id === columnId && col.mode === 'collection' ? { ...col, loading: true, matchedCourseCount } : col,
+      ),
+    )
+
+    Promise.all(missing.map((c) => api.getStudents(c.id).then((s) => ({ id: c.id, students: s }))))
+      .then((results) => {
+        for (const r of results) cacheRef.current[r.id] = r.students
+        const students = matchedCourses.length > 0 ? union(...matchedCourses.map((c) => cacheRef.current[c.id] ?? [])) : []
+        setColumns((cols) =>
+          cols.map((col) =>
+            col.id === columnId && col.mode === 'collection'
+              ? { ...col, students, matchedCourseCount, loading: false, error: null }
+              : col,
+          ),
+        )
+      })
+      .catch((err) => {
+        setColumns((cols) =>
+          cols.map((col) =>
+            col.id === columnId && col.mode === 'collection'
+              ? { ...col, loading: false, error: err instanceof Error ? err.message : 'Failed to load students' }
+              : col,
+          ),
+        )
+      })
+  }, [matchedCourses, columnId, setColumns])
+
+  return null
+}
+
+// --- Collection filters UI ---
+
+function CollectionFiltersUI({
+  filters,
+  onChange,
+}: {
+  filters: CollectionFilters
+  onChange: (updated: CollectionFilters) => void
+}) {
+  const courses = useAppStore((s) => s.courses)
+  const availableTerms = useMemo(() => [...new Set(courses.map((c) => c.term_name))].sort(), [courses])
+
+  const toggleTerm = (term: string) =>
+    onChange({
+      ...filters,
+      selectedTerms: filters.selectedTerms.includes(term)
+        ? filters.selectedTerms.filter((t) => t !== term)
+        : [...filters.selectedTerms, term],
+    })
+
+  return (
+    <div className="trend-collection-filters">
+      <div className="collection-filter">
+        <div className="collection-filter__label">Terms</div>
+        <div className="collection-terms">
+          {availableTerms.length === 0 ? (
+            <span className="collection-empty">Search courses first</span>
+          ) : (
+            availableTerms.map((term) => (
+              <button
+                key={term}
+                className={`collection-term-chip${filters.selectedTerms.includes(term) ? ' collection-term-chip--active' : ''}`}
+                onClick={() => toggleTerm(term)}
+              >
+                {term}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+      <div className="collection-filter">
+        <div className="collection-filter__label">Department</div>
+        <input
+          placeholder="e.g. ANGD"
+          value={filters.department}
+          onChange={(e) => onChange({ ...filters, department: e.target.value })}
+        />
+      </div>
+      <div className="collection-filter">
+        <div className="collection-filter__label">Course Number</div>
+        <input
+          placeholder="e.g. 3*** or 3*7*"
+          value={filters.numberPattern}
+          onChange={(e) => onChange({ ...filters, numberPattern: e.target.value })}
+        />
+      </div>
+    </div>
+  )
+}
+
+// --- Helpers ---
+
 function studentKey(student: Student) {
   return student.id
 }
 
 function compareStudents(previous: Student[] | null, current: Student[]): Comparison {
   if (!previous) return { retained: current, lost: [], added: [] }
-
-  const previousMap = new Map(previous.map((student) => [studentKey(student), student]))
-  const currentMap = new Map(current.map((student) => [studentKey(student), student]))
-
+  const previousMap = new Map(previous.map((s) => [studentKey(s), s]))
+  const currentMap = new Map(current.map((s) => [studentKey(s), s]))
   return {
-    retained: current.filter((student) => previousMap.has(studentKey(student))),
-    lost: previous.filter((student) => !currentMap.has(studentKey(student))),
-    added: current.filter((student) => !previousMap.has(studentKey(student))),
+    retained: current.filter((s) => previousMap.has(studentKey(s))),
+    lost: previous.filter((s) => !currentMap.has(studentKey(s))),
+    added: current.filter((s) => !previousMap.has(studentKey(s))),
   }
 }
 
@@ -57,21 +237,20 @@ function CourseSelect({
   value: number | null
   onChange: (courseId: number) => void
 }) {
-  const selected = courses.find((course) => course.id === value)
-
+  const selected = courses.find((c) => c.id === value)
   return (
     <select
       className="trend-course-select"
       value={value ?? ''}
-      onChange={(event) => onChange(Number(event.target.value))}
+      onChange={(e) => onChange(Number(e.target.value))}
     >
       <option value="">Select course</option>
-      {courses.map((course) => (
-        <option key={course.id} value={course.id}>
-          {course.term_name} - {course.name}
+      {courses.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.term_name} - {c.name}
         </option>
       ))}
-      {selected && !courses.some((course) => course.id === selected.id) && (
+      {selected && !courses.some((c) => c.id === selected.id) && (
         <option value={selected.id}>{selected.term_name} - {selected.name}</option>
       )}
     </select>
@@ -89,31 +268,45 @@ function safeName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
 
-function axisLabel(course: Course | null) {
+function axisLabel(column: TrendColumn, course: Course | null): string {
+  if (column.mode === 'collection') {
+    const { department, numberPattern, selectedTerms } = column.collection
+    if (department && numberPattern) return `${department.toUpperCase()} ${numberPattern}`
+    if (department) return department.toUpperCase()
+    if (selectedTerms.length === 1) return selectedTerms[0]
+    if (selectedTerms.length > 1) return `${selectedTerms.length} Terms`
+    return 'Collection'
+  }
   if (!course) return 'No course'
   return course.name.length > 24 ? `${course.name.slice(0, 21)}...` : course.name
 }
 
+function axisTermLabel(column: TrendColumn, course: Course | null): string {
+  if (column.mode === 'collection') {
+    return `${column.matchedCourseCount} course${column.matchedCourseCount !== 1 ? 's' : ''}`
+  }
+  return course?.term_name ?? ''
+}
+
+// --- Main component ---
+
 export function TrendAnalysis() {
-  const courses = useAppStore((state) => state.courses)
-  const setActiveStudentList = useAppStore((state) => state.setActiveStudentList)
-  const [columns, setColumns] = useState<TrendColumn[]>([
-    { id: nextColumnId(), courseId: null, loading: false, error: null, students: [], width: 240 },
-    { id: nextColumnId(), courseId: null, loading: false, error: null, students: [], width: 240 },
-  ])
+  const courses = useAppStore((s) => s.courses)
+  const setActiveStudentList = useAppStore((s) => s.setActiveStudentList)
+  const [columns, setColumns] = useState<TrendColumn[]>([makeColumn(), makeColumn()])
   const [zoom, setZoom] = useState(1)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [menu, setMenu] = useState<{ index: number; x: number; y: number } | null>(null)
 
-  const selectedCourses = columns.map((column) => courses.find((course) => course.id === column.courseId) ?? null)
-  const comparisons = columns.map((column, index) =>
-    compareStudents(index > 0 ? columns[index - 1].students : null, column.students)
+  const selectedCourses = columns.map((col) => courses.find((c) => c.id === col.courseId) ?? null)
+  const comparisons = columns.map((col, i) =>
+    compareStudents(i > 0 ? columns[i - 1].students : null, col.students),
   )
 
-  const maxCount = Math.max(1, ...columns.map((column) => column.students.length))
+  const maxCount = Math.max(1, ...columns.map((col) => col.students.length))
   const graph = useMemo(() => {
     const gap = 8
-    const contentWidth = columns.reduce((sum, column) => sum + column.width, 0) + Math.max(0, columns.length - 1) * gap
+    const contentWidth = columns.reduce((sum, col) => sum + col.width, 0) + Math.max(0, columns.length - 1) * gap
     const width = Math.max(640, contentWidth + 112)
     const height = 320
     const padX = 56
@@ -121,54 +314,67 @@ export function TrendAnalysis() {
     const padBottom = 88
     const plotHeight = height - padTop - padBottom
     let offset = padX
-    const points = columns.map((column) => {
-      const x = offset + column.width / 2
-      const y = padTop + plotHeight - (column.students.length / maxCount) * plotHeight
-      offset += column.width + gap
-      return { x, y, count: column.students.length }
+    const points = columns.map((col) => {
+      const x = offset + col.width / 2
+      const y = padTop + plotHeight - (col.students.length / maxCount) * plotHeight
+      offset += col.width + gap
+      return { x, y, count: col.students.length }
     })
     return { width, height, padX, padTop, padBottom, points }
   }, [columns, maxCount])
 
   const setColumnCourse = async (columnId: string, courseId: number) => {
-    setColumns((current) =>
-      current.map((column) =>
-        column.id === columnId ? { ...column, courseId, loading: true, error: null, students: [] } : column
-      )
+    setColumns((curr) =>
+      curr.map((col) =>
+        col.id === columnId ? { ...col, courseId, loading: true, error: null, students: [] } : col,
+      ),
     )
     try {
       const students = await api.getStudents(courseId)
-      setColumns((current) =>
-        current.map((column) =>
-          column.id === columnId ? { ...column, loading: false, students } : column
-        )
+      setColumns((curr) =>
+        curr.map((col) => col.id === columnId ? { ...col, loading: false, students } : col),
       )
-    } catch (error) {
-      setColumns((current) =>
-        current.map((column) =>
-          column.id === columnId
-            ? { ...column, loading: false, error: error instanceof Error ? error.message : 'Unable to load students' }
-            : column
-        )
+    } catch (err) {
+      setColumns((curr) =>
+        curr.map((col) =>
+          col.id === columnId
+            ? { ...col, loading: false, error: err instanceof Error ? err.message : 'Unable to load students' }
+            : col,
+        ),
       )
     }
   }
 
-  const addColumn = () => {
-    setColumns((current) => [
-      ...current,
-      { id: nextColumnId(), courseId: null, loading: false, error: null, students: [], width: 240 },
-    ])
+  const setColumnMode = (columnId: string, mode: 'course' | 'collection') => {
+    setColumns((curr) =>
+      curr.map((col) =>
+        col.id === columnId
+          ? { ...col, mode, courseId: null, students: [], loading: false, error: null, matchedCourseCount: 0 }
+          : col,
+      ),
+    )
   }
 
+  const setCollectionFilters = (columnId: string, collection: CollectionFilters) => {
+    setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, collection } : col))
+  }
+
+  const addColumn = () => setColumns((curr) => [...curr, makeColumn()])
+
   const removeColumn = (columnId: string) => {
-    setColumns((current) => current.filter((column) => column.id !== columnId))
+    setColumns((curr) => curr.filter((col) => col.id !== columnId))
     setMenu(null)
   }
 
   const handleDownload = (index: number, kind: CompareKind) => {
+    const column = columns[index]
     const course = selectedCourses[index]
-    const base = course ? `${course.term_name}-${course.name}-${compareLabels[kind]}` : compareLabels[kind]
+    const base =
+      column.mode === 'collection'
+        ? `Collection-${compareLabels[kind]}`
+        : course
+          ? `${course.term_name}-${course.name}-${compareLabels[kind]}`
+          : compareLabels[kind]
     downloadCSV(comparisons[index][kind], `${safeName(base)}.csv`)
     setMenu(null)
   }
@@ -178,24 +384,19 @@ export function TrendAnalysis() {
     setMenu(null)
   }
 
-  const startResize = (event: ReactPointerEvent, columnId: string) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const startX = event.clientX
-    const startWidth = columns.find((column) => column.id === columnId)?.width ?? 240
-
-    const handleMove = (moveEvent: PointerEvent) => {
-      const width = Math.min(420, Math.max(180, startWidth + moveEvent.clientX - startX))
-      setColumns((current) =>
-        current.map((column) => (column.id === columnId ? { ...column, width } : column))
-      )
+  const startResize = (e: ReactPointerEvent, columnId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startWidth = columns.find((col) => col.id === columnId)?.width ?? 240
+    const handleMove = (ev: PointerEvent) => {
+      const width = Math.min(420, Math.max(180, startWidth + ev.clientX - startX))
+      setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, width } : col))
     }
-
     const handleUp = () => {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
     }
-
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
   }
@@ -205,15 +406,21 @@ export function TrendAnalysis() {
 
   return (
     <div className="trend-analysis" onClick={() => setMenu(null)}>
-      <section className="trend-graph" onContextMenu={(event) => event.preventDefault()}>
+      {columns
+        .filter((col) => col.mode === 'collection')
+        .map((col) => (
+          <CollectionSync key={col.id} columnId={col.id} filters={col.collection} setColumns={setColumns} />
+        ))}
+
+      <section className="trend-graph" onContextMenu={(e) => e.preventDefault()}>
         <div className="trend-graph__toolbar">
-          <button className="trend-icon-button" title="Zoom out" onClick={() => setZoom((value) => Math.max(0.6, value - 0.2))}>
+          <button className="trend-icon-button" title="Zoom out" onClick={() => setZoom((v) => Math.max(0.6, v - 0.2))}>
             -
           </button>
           <button className="trend-icon-button" title="Auto fit" onClick={() => setZoom(1)}>
             Fit
           </button>
-          <button className="trend-icon-button" title="Zoom in" onClick={() => setZoom((value) => Math.min(2, value + 0.2))}>
+          <button className="trend-icon-button" title="Zoom in" onClick={() => setZoom((v) => Math.min(2, v + 0.2))}>
             +
           </button>
         </div>
@@ -240,7 +447,7 @@ export function TrendAnalysis() {
             {graph.points.length > 1 && (
               <polyline
                 className="trend-graph__line"
-                points={graph.points.map((point) => `${point.x},${point.y}`).join(' ')}
+                points={graph.points.map((p) => `${p.x},${p.y}`).join(' ')}
               />
             )}
             {graph.points.map((point, index) => (
@@ -253,27 +460,29 @@ export function TrendAnalysis() {
                   r={6}
                   onMouseEnter={() => setHoveredIndex(index)}
                   onMouseLeave={() => setHoveredIndex(null)}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    setMenu({ index, x: event.clientX, y: event.clientY })
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setMenu({ index, x: e.clientX, y: e.clientY })
                   }}
                 />
                 <text className="trend-graph__count" x={point.x} y={point.y - 12} textAnchor="middle">
                   {point.count}
                 </text>
                 <text className="trend-graph__x-label" x={point.x} y={graph.height - 54} textAnchor="middle">
-                  {axisLabel(selectedCourses[index])}
+                  {axisLabel(columns[index], selectedCourses[index])}
                 </text>
                 <text className="trend-graph__x-term" x={point.x} y={graph.height - 36} textAnchor="middle">
-                  {selectedCourses[index]?.term_name ?? ''}
+                  {axisTermLabel(columns[index], selectedCourses[index])}
                 </text>
               </g>
             ))}
           </svg>
           {hoveredIndex !== null && hoveredComparison && (
             <div className="trend-tooltip">
-              <div className="trend-tooltip__title">{selectedCourses[hoveredIndex]?.name ?? 'Course'}</div>
+              <div className="trend-tooltip__title">
+                {axisLabel(columns[hoveredIndex], selectedCourses[hoveredIndex])}
+              </div>
               <div>Retained: {hoveredComparison.retained.length}</div>
               <div>Lost: {hoveredComparison.lost.length}</div>
               <div>New: {hoveredComparison.added.length}</div>
@@ -288,37 +497,71 @@ export function TrendAnalysis() {
             const course = selectedCourses[index]
             return (
               <article
-                className="trend-column"
+                className={`trend-column${column.mode === 'collection' ? ' trend-column--collection' : ''}`}
                 key={column.id}
                 style={{ width: column.width, minWidth: column.width }}
                 onDoubleClick={() => setActiveStudentList(column.students)}
               >
                 <div className="trend-column__header">
                   <span className="trend-column__number">{index + 1}</span>
+                  <div className="trend-column__mode-tabs">
+                    <button
+                      className={`trend-column__tab${column.mode === 'course' ? ' trend-column__tab--active' : ''}`}
+                      onClick={() => setColumnMode(column.id, 'course')}
+                    >
+                      Course
+                    </button>
+                    <button
+                      className={`trend-column__tab${column.mode === 'collection' ? ' trend-column__tab--active' : ''}`}
+                      onClick={() => setColumnMode(column.id, 'collection')}
+                    >
+                      Collection
+                    </button>
+                  </div>
                   <button className="trend-column__remove" title="Remove column" onClick={() => removeColumn(column.id)}>
                     x
                   </button>
                 </div>
-                <CourseSelect
-                  courses={courses}
-                  value={column.courseId}
-                  onChange={(courseId) => setColumnCourse(column.id, courseId)}
-                />
+
+                {column.mode === 'course' ? (
+                  <CourseSelect
+                    courses={courses}
+                    value={column.courseId}
+                    onChange={(courseId) => setColumnCourse(column.id, courseId)}
+                  />
+                ) : (
+                  <CollectionFiltersUI
+                    filters={column.collection}
+                    onChange={(updated) => setCollectionFilters(column.id, updated)}
+                  />
+                )}
+
                 <div className="trend-column__meta">
                   <div>
                     <span>Students</span>
                     <strong>{column.loading ? '...' : column.students.length}</strong>
                   </div>
-                  <div>
-                    <span>Time</span>
-                    <strong>{course?.meeting_time ?? 'TBD'}</strong>
-                  </div>
-                  <div>
-                    <span>Instructor</span>
-                    <strong>{course?.instructor ?? 'TBD'}</strong>
-                  </div>
+                  {column.mode === 'collection' ? (
+                    <div>
+                      <span>Courses</span>
+                      <strong>{column.matchedCourseCount}</strong>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <span>Time</span>
+                        <strong>{course?.meeting_time ?? 'TBD'}</strong>
+                      </div>
+                      <div>
+                        <span>Instructor</span>
+                        <strong>{course?.instructor ?? 'TBD'}</strong>
+                      </div>
+                    </>
+                  )}
                 </div>
+
                 {column.error && <div className="trend-column__error">{column.error}</div>}
+
                 <ul className="trend-student-list">
                   {column.students.map((student) => (
                     <li key={student.id} className="trend-student">
@@ -327,24 +570,29 @@ export function TrendAnalysis() {
                     </li>
                   ))}
                 </ul>
+
                 <div
                   className="trend-column__resize"
                   role="separator"
                   aria-orientation="vertical"
                   title="Resize column"
-                  onPointerDown={(event) => startResize(event, column.id)}
+                  onPointerDown={(e) => startResize(e, column.id)}
                 />
               </article>
             )
           })}
-          <button className="trend-add-column" onClick={addColumn} title="Add course column">
+          <button className="trend-add-column" onClick={addColumn} title="Add column">
             +
           </button>
         </div>
       </section>
 
       {menu && activeMenu && (
-        <div className="trend-context-menu" style={{ left: menu.x, top: menu.y }} onClick={(event) => event.stopPropagation()}>
+        <div
+          className="trend-context-menu"
+          style={{ left: menu.x, top: menu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
           {(['retained', 'lost', 'added'] as CompareKind[]).map((kind) => (
             <div className="trend-context-menu__group" key={kind}>
               <div className="trend-context-menu__label">{compareLabels[kind]} ({activeMenu[kind].length})</div>

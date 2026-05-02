@@ -156,11 +156,43 @@
   border-color: var(--color-accent-cyan);
 }
 
+.trend-column--collection {
+  border-top: 2px solid var(--color-accent-green);
+}
+
 .trend-column__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-1);
   height: 22px;
+}
+
+.trend-column__mode-tabs {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  gap: 2px;
+}
+
+.trend-column__tab {
+  height: 18px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.trend-column__tab:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.trend-column__tab--active {
+  background: var(--color-bg-input);
+  border-color: var(--color-surface-border);
+  color: var(--color-accent-cyan);
+  font-weight: 600;
 }
 
 .trend-column__number {
@@ -338,4 +370,67 @@
 .trend-context-menu button:hover {
   background: var(--color-bg-hover);
   color: var(--color-text-heading);
+}
+
+.trend-collection-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-y: auto;
+  max-height: 160px;
+}
+
+.trend-collection-filters .collection-filter {
+  margin-bottom: 0;
+}
+
+.collection-filter {
+  margin-bottom: var(--space-2);
+}
+
+.collection-filter__label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-bottom: 3px;
+}
+
+.collection-filter input {
+  width: 100%;
+  font-size: var(--font-size-xs);
+  padding: 3px var(--space-2);
+}
+
+.collection-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 72px;
+  overflow-y: auto;
+}
+
+.collection-term-chip {
+  font-size: var(--font-size-xs);
+  padding: 2px var(--space-2);
+  border-radius: 10px;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-surface-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.collection-term-chip:hover {
+  border-color: var(--color-accent-green);
+  color: var(--color-text-primary);
+}
+
+.collection-term-chip--active {
+  background: var(--color-accent-green);
+  color: var(--color-bg-input);
+  border-color: var(--color-accent-green);
+}
+
+.collection-empty {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
