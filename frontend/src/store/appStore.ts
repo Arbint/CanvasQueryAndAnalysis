@@ -11,6 +11,9 @@ interface AppStore {
 
   activeStudentList: Student[]
   setActiveStudentList: (students: Student[]) => void
+
+  pendingAddCourseId: number | null
+  setPendingAddCourseId: (id: number | null) => void
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -28,4 +31,7 @@ export const useAppStore = create<AppStore>((set) => ({
 
   activeStudentList: [],
   setActiveStudentList: (students) => set({ activeStudentList: students }),
+
+  pendingAddCourseId: null,
+  setPendingAddCourseId: (id) => set({ pendingAddCourseId: id }),
 }))

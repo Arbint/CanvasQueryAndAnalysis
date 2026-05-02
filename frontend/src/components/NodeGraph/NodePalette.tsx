@@ -9,6 +9,7 @@ interface NodePaletteProps {
 
 const NODE_TYPES = [
   { type: 'courseNode', label: 'Course' },
+  { type: 'courseCollectionNode', label: 'Course Collection' },
   { type: 'unionNode', label: 'Union' },
   { type: 'intersectNode', label: 'Intersect' },
   { type: 'subtractNode', label: 'Subtract' },

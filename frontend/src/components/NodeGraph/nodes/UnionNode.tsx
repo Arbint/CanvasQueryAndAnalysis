@@ -1,15 +1,16 @@
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useState } from 'react'
+import { NodeExpandPanel, useNodeExpand } from '../nodeShared'
 import '../NodeGraph.css'
 
 const MIN_INPUTS = 2
-// Must match CSS: .node border-top(2) + .node__header height(32) + .node__body padding-top(8) + row center(14)
 const FIRST_HANDLE_TOP = 56
 const ROW_HEIGHT = 28
 
 export function UnionNode({ id }: NodeProps) {
   const [inputCount, setInputCount] = useState(MIN_INPUTS)
   const { setEdges } = useReactFlow()
+  const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
 
   const addInput = () => setInputCount((n) => n + 1)
 
@@ -22,7 +23,12 @@ export function UnionNode({ id }: NodeProps) {
 
   return (
     <div className="node node--aggregation">
-      <div className="node__header">Union</div>
+      <div className="node__header">
+        <span>Union</span>
+        <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
+          {expanded ? '▲' : '▼'}
+        </button>
+      </div>
       <div className="node__body">
         {Array.from({ length: inputCount }, (_, i) => (
           <div key={i} className="node__pin-row">
@@ -38,6 +44,7 @@ export function UnionNode({ id }: NodeProps) {
         ))}
         <button className="node__add-pin" onClick={addInput}>+ input</button>
       </div>
+      {expanded && <NodeExpandPanel students={expandedStudents} />}
       <Handle type="source" position={Position.Right} id="output" />
     </div>
   )

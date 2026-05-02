@@ -66,7 +66,7 @@ export function evaluateGraph(
     const node = nodes.find((n) => n.id === nodeId)!
     const type = node.type
 
-    if (type === 'courseNode') {
+    if (type === 'courseNode' || type === 'courseCollectionNode') {
       results[nodeId] = courseStudents[nodeId] ?? []
       continue
     }

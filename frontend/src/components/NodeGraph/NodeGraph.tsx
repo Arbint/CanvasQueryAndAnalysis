@@ -11,9 +11,10 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../store/appStore'
 import { evaluateGraph } from './graphEngine'
+import { CourseCollectionNode } from './nodes/CourseCollectionNode'
 import { CourseNode, type CourseNodeData } from './nodes/CourseNode'
 import { IntersectNode } from './nodes/IntersectNode'
 import { SubtractNode } from './nodes/SubtractNode'
@@ -23,6 +24,7 @@ import './NodeGraph.css'
 
 const NODE_TYPE_MAP = {
   courseNode: CourseNode,
+  courseCollectionNode: CourseCollectionNode,
   unionNode: UnionNode,
   intersectNode: IntersectNode,
   subtractNode: SubtractNode,
@@ -38,10 +40,11 @@ function NodeGraphInner() {
   const flowRef = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition } = useReactFlow()
   const setActiveStudentList = useAppStore((s) => s.setActiveStudentList)
+  const pendingAddCourseId = useAppStore((s) => s.pendingAddCourseId)
+  const setPendingAddCourseId = useAppStore((s) => s.setPendingAddCourseId)
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      // Disconnect existing edge on the target handle before connecting
       setEdges((eds) => {
         const filtered = eds.filter(
           (e) => !(e.target === connection.target && e.targetHandle === connection.targetHandle)
@@ -61,7 +64,7 @@ function NodeGraphInner() {
     const rect = flowRef.current?.getBoundingClientRect()
     if (!rect) return
     const el = flowRef.current as FlowDiv
-    el._lastFlowPos = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    el._lastFlowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
     el._lastScreenPos = { x: e.clientX - rect.left, y: e.clientY - rect.top }
   }, [screenToFlowPosition])
 
@@ -71,7 +74,7 @@ function NodeGraphInner() {
         e.preventDefault()
         const el = flowRef.current as FlowDiv
         const screenPos = el._lastScreenPos ?? { x: 100, y: 100 }
-        const flowPos = el._lastFlowPos ?? screenToFlowPosition(screenPos)
+        const flowPos = el._lastFlowPos ?? screenToFlowPosition({ x: screenPos.x, y: screenPos.y })
         setPalette({ screenPos, flowPos })
       }
       if (e.key === 'Escape') setPalette(null)
@@ -94,11 +97,23 @@ function NodeGraphInner() {
     [palette, setNodes]
   )
 
+  useEffect(() => {
+    if (pendingAddCourseId == null) return
+    const newNode: Node = {
+      id: nextId(),
+      type: 'courseNode',
+      position: { x: 80, y: 80 },
+      data: { selectedCourseId: pendingAddCourseId },
+    }
+    setNodes((ns) => [...ns, newNode])
+    setPendingAddCourseId(null)
+  }, [pendingAddCourseId, setNodes, setPendingAddCourseId])
+
   const handleNodeDoubleClick: NodeMouseHandler = useCallback(
     (_, node) => {
       const courseStudents: Record<string, unknown> = {}
       for (const n of nodes) {
-        if (n.type === 'courseNode') {
+        if (n.type === 'courseNode' || n.type === 'courseCollectionNode') {
           courseStudents[n.id] = (n.data as CourseNodeData).students ?? []
         }
       }

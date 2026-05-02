@@ -8,7 +8,7 @@ import { CourseList } from './CourseList'
 import './CourseSearch.css'
 
 export function CourseSearch() {
-  const { selectedAccountId, courses, setCourses, updateCourseStudentCount } = useAppStore()
+  const { selectedAccountId, courses, setCourses, updateCourseStudentCount, setPendingAddCourseId } = useAppStore()
   const [terms, setTerms] = useState<Term[]>([])
   const [selectedTermIds, setSelectedTermIds] = useState<string[]>([])
   const [keywords, setKeywords] = useState<string[]>([])
@@ -101,7 +101,7 @@ export function CourseSearch() {
         </div>
       </div>
 
-      <CourseList courses={courses} loading={loading} error={error} />
+      <CourseList courses={courses} loading={loading} error={error} onCourseClick={(c) => setPendingAddCourseId(c.id)} />
     </div>
   )
 }

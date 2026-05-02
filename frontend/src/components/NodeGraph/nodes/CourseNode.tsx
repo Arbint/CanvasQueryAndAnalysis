@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { Course, Student } from '../../../api/types'
 import { useAppStore } from '../../../store/appStore'
+import { NodeExpandPanel, useNodeExpand } from '../nodeShared'
 import '../NodeGraph.css'
 
 export interface CourseNodeData extends Record<string, unknown> {
@@ -23,9 +24,10 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   const selected = courses.find((c) => c.id === value)
-  const filtered = courses.filter((c) =>
-    c.name.toLowerCase().includes(query.toLowerCase())
-  )
+  const filtered = courses.filter((c) => {
+    const q = query.toLowerCase()
+    return c.name.toLowerCase().includes(q) || c.term_name.toLowerCase().includes(q)
+  })
 
   useEffect(() => {
     if (!open) return
@@ -58,7 +60,7 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
           <input
             ref={inputRef}
             className="course-select__search"
-            placeholder="Search…"
+            placeholder="Search by name or term…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -80,7 +82,8 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => { onChange(c.id); setOpen(false) }}
                   >
-                    {c.name}
+                    <span className="course-select__option-name">{c.name}</span>
+                    <span className="course-select__option-term">{c.term_name}</span>
                   </button>
                 </li>
               ))
@@ -92,8 +95,9 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
   )
 }
 
-export function CourseNode({ data }: NodeProps) {
+export function CourseNode({ id, data }: NodeProps) {
   const courses = useAppStore((s) => s.courses)
+  const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(
     (data as CourseNodeData).selectedCourseId ?? null
   )
@@ -112,7 +116,12 @@ export function CourseNode({ data }: NodeProps) {
 
   return (
     <div className="node node--course">
-      <div className="node__header">Course</div>
+      <div className="node__header">
+        <span>Course</span>
+        <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
+          {expanded ? '▲' : '▼'}
+        </button>
+      </div>
       <div className="node__body">
         <SearchableSelect
           courses={courses}
@@ -121,6 +130,7 @@ export function CourseNode({ data }: NodeProps) {
         />
         {loading && <span className="node__loading">Loading students…</span>}
       </div>
+      {expanded && <NodeExpandPanel students={expandedStudents} />}
       <Handle type="source" position={Position.Right} id="output" />
     </div>
   )

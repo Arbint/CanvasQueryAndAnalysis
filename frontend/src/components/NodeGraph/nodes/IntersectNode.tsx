@@ -1,5 +1,6 @@
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useState } from 'react'
+import { NodeExpandPanel, useNodeExpand } from '../nodeShared'
 import '../NodeGraph.css'
 
 const MIN_INPUTS = 2
@@ -9,6 +10,7 @@ const ROW_HEIGHT = 28
 export function IntersectNode({ id }: NodeProps) {
   const [inputCount, setInputCount] = useState(MIN_INPUTS)
   const { setEdges } = useReactFlow()
+  const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
 
   const addInput = () => setInputCount((n) => n + 1)
 
@@ -21,7 +23,12 @@ export function IntersectNode({ id }: NodeProps) {
 
   return (
     <div className="node node--aggregation">
-      <div className="node__header">Intersect</div>
+      <div className="node__header">
+        <span>Intersect</span>
+        <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
+          {expanded ? '▲' : '▼'}
+        </button>
+      </div>
       <div className="node__body">
         {Array.from({ length: inputCount }, (_, i) => (
           <div key={i} className="node__pin-row">
@@ -37,6 +44,7 @@ export function IntersectNode({ id }: NodeProps) {
         ))}
         <button className="node__add-pin" onClick={addInput}>+ input</button>
       </div>
+      {expanded && <NodeExpandPanel students={expandedStudents} />}
       <Handle type="source" position={Position.Right} id="output" />
     </div>
   )

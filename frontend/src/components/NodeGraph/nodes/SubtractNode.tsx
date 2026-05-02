@@ -1,5 +1,6 @@
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useState } from 'react'
+import { NodeExpandPanel, useNodeExpand } from '../nodeShared'
 import '../NodeGraph.css'
 
 const MIN_SUBTRACT = 1
@@ -9,6 +10,7 @@ const ROW_HEIGHT = 28
 export function SubtractNode({ id }: NodeProps) {
   const [subtractCount, setSubtractCount] = useState(MIN_SUBTRACT)
   const { setEdges } = useReactFlow()
+  const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
 
   const addSubtract = () => setSubtractCount((n) => n + 1)
 
@@ -21,7 +23,12 @@ export function SubtractNode({ id }: NodeProps) {
 
   return (
     <div className="node node--aggregation">
-      <div className="node__header">Subtract</div>
+      <div className="node__header">
+        <span>Subtract</span>
+        <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
+          {expanded ? '▲' : '▼'}
+        </button>
+      </div>
       <div className="node__body">
         {/* "from" is row 0 */}
         <div className="node__pin-row">
@@ -48,6 +55,7 @@ export function SubtractNode({ id }: NodeProps) {
         ))}
         <button className="node__add-pin" onClick={addSubtract}>+ subtract</button>
       </div>
+      {expanded && <NodeExpandPanel students={expandedStudents} />}
       <Handle type="source" position={Position.Right} id="output" />
     </div>
   )

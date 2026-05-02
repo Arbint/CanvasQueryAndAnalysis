@@ -46,3 +46,11 @@
   color: var(--color-accent-cyan);
   font-variant-numeric: tabular-nums;
 }
+
+.course-list__row--clickable {
+  cursor: pointer;
+}
+
+.course-list__row--clickable:active td {
+  background-color: var(--color-surface-2);
+}
