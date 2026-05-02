@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { Course, Student } from '../../../api/types'
 import { useAppStore } from '../../../store/appStore'
-import { NodeExpandPanel, useNodeExpand } from '../nodeShared'
+import { NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
 import '../NodeGraph.css'
 
 export interface CourseNodeData extends Record<string, unknown> {
@@ -51,7 +51,12 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
         onClick={() => { setOpen((o) => !o); setQuery('') }}
       >
         <span className="course-select__label">
-          {selected ? selected.name : 'Select course…'}
+          {selected ? (
+            <>
+              <span className="course-select__label-name">{selected.name}</span>
+              <span className="course-select__label-term">{selected.term_name}</span>
+            </>
+          ) : 'Select course…'}
         </span>
         <span className="course-select__arrow">{open ? '▲' : '▼'}</span>
       </button>
@@ -98,6 +103,7 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
 export function CourseNode({ id, data }: NodeProps) {
   const courses = useAppStore((s) => s.courses)
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
+  const studentCount = useNodeStudentCount(id)
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(
     (data as CourseNodeData).selectedCourseId ?? null
   )
@@ -118,6 +124,7 @@ export function CourseNode({ id, data }: NodeProps) {
     <div className="node node--course">
       <div className="node__header">
         <span>Course</span>
+        {studentCount !== null && <span className="node__count">{studentCount}</span>}
         <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
           {expanded ? '▲' : '▼'}
         </button>

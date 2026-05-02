@@ -4,7 +4,7 @@ import { api } from '../../../api/client'
 import type { Course, Student } from '../../../api/types'
 import { union } from '../../../lib/setOperations'
 import { useAppStore } from '../../../store/appStore'
-import { NodeExpandPanel, useNodeExpand } from '../nodeShared'
+import { NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
 import '../NodeGraph.css'
 
 export interface CourseCollectionNodeData extends Record<string, unknown> {
@@ -47,6 +47,7 @@ function courseMatchesFilters(
 export function CourseCollectionNode({ id, data }: NodeProps) {
   const courses = useAppStore((s) => s.courses)
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
+  const studentCount = useNodeStudentCount(id)
 
   const [selectedTerms, setSelectedTerms] = useState<string[]>([])
   const [department, setDepartment] = useState('')
@@ -95,6 +96,7 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
     <div className="node node--collection">
       <div className="node__header">
         <span>Course Collection</span>
+        {studentCount !== null && <span className="node__count">{studentCount}</span>}
         <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
           {expanded ? '▲' : '▼'}
         </button>

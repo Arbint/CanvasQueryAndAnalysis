@@ -54,7 +54,7 @@
 
 .course-select__trigger {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   width: 100%;
   padding: var(--space-1) var(--space-2);
@@ -73,9 +73,24 @@
 
 .course-select__label {
   overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.course-select__label-name {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+}
+
+.course-select__label-term {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .course-select__arrow {
@@ -147,6 +162,15 @@
   color: var(--color-text-muted);
 }
 
+.node__count {
+  margin-left: auto;
+  margin-right: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent-cyan);
+  font-weight: 400;
+}
+
 .node__expand-btn {
   flex-shrink: 0;
   padding: 0 var(--space-1);
@@ -172,8 +196,6 @@
 
 .node__expand-list {
   list-style: none;
-  max-height: 180px;
-  overflow-y: auto;
 }
 
 .node__expand-item {

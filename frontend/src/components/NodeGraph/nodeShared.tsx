@@ -1,7 +1,40 @@
 import { useCallback, useState } from 'react'
-import { useReactFlow } from '@xyflow/react'
+import { useReactFlow, useStore } from '@xyflow/react'
 import type { Student } from '../../api/types'
 import { evaluateGraph } from './graphEngine'
+
+export function useNodeStudentCount(nodeId: string): number | null {
+  const { getNodes, getEdges } = useReactFlow()
+  // Re-run whenever edges are added/removed so operation nodes stay current
+  useStore((s) => s.edges.length)
+
+  const nodes = getNodes()
+  const edges = getEdges()
+  const thisNode = nodes.find((n) => n.id === nodeId)
+  if (!thisNode) return null
+
+  if (thisNode.type === 'courseNode' || thisNode.type === 'courseCollectionNode') {
+    const students = (thisNode.data as Record<string, unknown>).students as Student[] | undefined
+    return students?.length ?? null
+  }
+
+  // Operation nodes: only show count when at least one input is connected
+  if (!edges.some((e) => e.target === nodeId)) return null
+
+  const courseStudents: Record<string, Student[]> = {}
+  for (const n of nodes) {
+    if (n.type === 'courseNode' || n.type === 'courseCollectionNode') {
+      courseStudents[n.id] = ((n.data as Record<string, unknown>).students as Student[] | undefined) ?? []
+    }
+  }
+  try {
+    const results = evaluateGraph(nodes, edges, courseStudents as never)
+    const count = results[nodeId]?.length
+    return count !== undefined ? count : null
+  } catch {
+    return null
+  }
+}
 
 export function useNodeExpand(nodeId: string) {
   const [expanded, setExpanded] = useState(false)
