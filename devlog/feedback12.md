@@ -1,0 +1,1 @@
+when more courses are added, eventually, the course section in trend analysis would not be wide enough to fit all courses in there, add a horizontal slider to cope with that.
