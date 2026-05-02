@@ -12,6 +12,15 @@ db: dict = json.loads(DB_PATH.read_text(encoding="utf-8-sig"))
 _student_map: dict[int, dict] = {s["id"]: s for s in db["students"]}
 _term_map: dict[int, str] = {t["id"]: t["name"] for t in db["terms"]}
 _course_ids: set[int] = {c["id"] for c in db["courses"]}
+_meeting_patterns = [
+    "Mon/Wed 9:00-10:15 AM",
+    "Mon/Wed 10:30-11:45 AM",
+    "Tue/Thu 9:30-10:45 AM",
+    "Tue/Thu 1:30-2:45 PM",
+    "Wed 6:00-8:45 PM",
+    "Online async",
+]
+_grades = ["A", "A-", "B+", "B", "B-", "C+", "C"]
 
 app = FastAPI(title="Canvas Query and Analysis — Mock Backend")
 
@@ -64,6 +73,7 @@ def list_courses(
             "instructor": course["instructor"],
             "term_name": _term_map.get(course["term_id"], "Unknown"),
             "student_count": None,
+            "meeting_time": course.get("meeting_time", _meeting_patterns[course["id"] % len(_meeting_patterns)]),
         })
     return results
 
@@ -98,5 +108,6 @@ def list_students(course_id: int) -> list[dict]:
             "login_id": student["login_id"],
             "enrollment_state": state,
             "email": f"{student['login_id']}@student.uiwtx.edu",
+            "grade": enrollment.get("grade", _grades[(student["id"] + course_id) % len(_grades)]),
         })
     return result

@@ -1,7 +1,7 @@
 import { ReactFlowProvider } from '@xyflow/react'
 import { ResizableColumns } from './components/layout/ResizableColumns'
 import { CourseSearch } from './components/CourseSearch/CourseSearch'
-import { NodeGraph } from './components/NodeGraph/NodeGraph'
+import { WorkingArea } from './components/WorkingArea/WorkingArea'
 import { StudentList } from './components/StudentList/StudentList'
 import './App.css'
 
@@ -20,7 +20,7 @@ export function App() {
         <ReactFlowProvider>
           <ResizableColumns
             left={<CourseSearch />}
-            center={<NodeGraph />}
+            center={<WorkingArea />}
             right={<StudentList />}
           />
         </ReactFlowProvider>

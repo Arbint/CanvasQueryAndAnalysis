@@ -1,0 +1,298 @@
+.trend-analysis {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(210px, 38%) minmax(0, 1fr);
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--color-bg-base);
+}
+
+.trend-graph {
+  min-height: 0;
+  border-bottom: 1px solid var(--color-surface-border);
+  background: var(--color-bg-base);
+}
+
+.trend-graph__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 34px;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-surface-border);
+  background: var(--color-bg-overlay);
+}
+
+.trend-icon-button {
+  min-width: 32px;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.trend-icon-button:hover {
+  border-color: var(--color-accent-blue);
+  color: var(--color-text-heading);
+}
+
+.trend-graph__viewport {
+  position: relative;
+  height: calc(100% - 34px);
+  overflow: auto;
+}
+
+.trend-graph__svg {
+  display: block;
+  min-width: 100%;
+}
+
+.trend-graph__axis {
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+}
+
+.trend-graph__grid {
+  stroke: var(--color-surface-border);
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+.trend-graph__tick,
+.trend-graph__count {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.trend-graph__line {
+  fill: none;
+  stroke: var(--color-accent-cyan);
+  stroke-width: 2;
+}
+
+.trend-graph__column-line {
+  stroke: var(--color-surface-border);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.55;
+}
+
+.trend-graph__dot {
+  fill: var(--color-accent-blue);
+  stroke: var(--color-bg-base);
+  stroke-width: 2;
+  cursor: pointer;
+}
+
+.trend-graph__dot:hover {
+  fill: var(--color-accent-yellow);
+}
+
+.trend-tooltip {
+  position: absolute;
+  left: var(--space-4);
+  top: var(--space-4);
+  z-index: 20;
+  min-width: 160px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  font-size: var(--font-size-sm);
+}
+
+.trend-tooltip__title {
+  color: var(--color-text-heading);
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+
+.trend-courses {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.trend-courses__strip {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+.trend-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 220px;
+  min-width: 220px;
+  min-height: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+}
+
+.trend-column__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+}
+
+.trend-column__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-bg-input);
+  color: var(--color-accent-cyan);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.trend-column__remove {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+
+.trend-column__remove:hover {
+  color: var(--color-accent-red);
+  background: var(--color-bg-hover);
+}
+
+.trend-course-select {
+  width: 100%;
+  min-height: 30px;
+  font-size: var(--font-size-sm);
+}
+
+.trend-column__meta {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-input);
+}
+
+.trend-column__meta div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.trend-column__meta span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.trend-column__meta strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-heading);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.trend-column__error {
+  color: var(--color-accent-red);
+  font-size: var(--font-size-xs);
+}
+
+.trend-student-list {
+  min-height: 0;
+  overflow: auto;
+  list-style: none;
+  border-top: 1px solid var(--color-surface-border);
+}
+
+.trend-student {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 24px;
+  border-bottom: 1px solid rgba(64, 71, 84, 0.5);
+  font-size: var(--font-size-xs);
+}
+
+.trend-student__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trend-student__grade {
+  color: var(--color-accent-green);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.trend-add-column {
+  width: 44px;
+  min-width: 44px;
+  border: 1px dashed var(--color-surface-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 24px;
+}
+
+.trend-add-column:hover {
+  color: var(--color-accent-blue);
+  border-color: var(--color-accent-blue);
+  background: var(--color-bg-hover);
+}
+
+.trend-context-menu {
+  position: fixed;
+  z-index: 1000;
+  width: 180px;
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.trend-context-menu__group {
+  padding: var(--space-1);
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+.trend-context-menu__group:last-child {
+  border-bottom: none;
+}
+
+.trend-context-menu__label {
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.trend-context-menu button {
+  display: block;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  text-align: left;
+}
+
+.trend-context-menu button:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-heading);
+}

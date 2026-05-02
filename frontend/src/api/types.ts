@@ -15,6 +15,7 @@ export interface Course {
   instructor: string
   term_name: string
   student_count: number | null
+  meeting_time?: string
 }
 
 export interface Student {
@@ -25,6 +26,7 @@ export interface Student {
   login_id: string
   enrollment_state: 'active' | 'inactive'
   email: string
+  grade?: string
 }
 
 export interface CourseQuery {
