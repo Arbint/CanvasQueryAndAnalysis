@@ -3,6 +3,9 @@ import { useState } from 'react'
 import '../NodeGraph.css'
 
 const MIN_INPUTS = 2
+// Must match CSS: .node border-top(2) + .node__header height(32) + .node__body padding-top(8) + row center(14)
+const FIRST_HANDLE_TOP = 56
+const ROW_HEIGHT = 28
 
 export function UnionNode({ id }: NodeProps) {
   const [inputCount, setInputCount] = useState(MIN_INPUTS)
@@ -27,7 +30,7 @@ export function UnionNode({ id }: NodeProps) {
               type="target"
               position={Position.Left}
               id={`input-${i}`}
-              style={{ top: `${40 + i * 28}px` }}
+              style={{ top: FIRST_HANDLE_TOP + i * ROW_HEIGHT }}
               onClick={(e) => removeInput(i, e as unknown as React.MouseEvent)}
             />
             <span className="node__pin-label">in {i + 1}</span>

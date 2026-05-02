@@ -1,5 +1,4 @@
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -52,17 +51,27 @@ class CanvasClient:
         )
 
     async def get_terms(self, account_id: int) -> list[dict]:
-        raw = await self._paginate(
-            f"{self._base_url}/api/v1/accounts/{account_id}/terms",
-            {"per_page": 100},
-        )
-        # Canvas wraps terms in {"enrollment_terms": [...]}
+        # Canvas enrollment terms live on the root account only. Sub-account IDs
+        # return empty enrollment_terms. Using "self" always resolves to the root.
+        # Canvas wraps the response in {"enrollment_terms": [...]}, so _paginate
+        # (which assumes a top-level list) cannot be used here.
         terms: list[dict] = []
-        for item in raw:
-            if "enrollment_terms" in item:
-                terms.extend(item["enrollment_terms"])
-            else:
-                terms.append(item)
+        next_url: str | None = f"{self._base_url}/api/v1/accounts/self/terms"
+        next_params: dict | None = {"per_page": 100}
+
+        async with httpx.AsyncClient(headers=self._headers) as client:
+            while next_url:
+                response = await client.get(next_url, params=next_params)
+                if response.status_code >= 400:
+                    raise CanvasAPIError(
+                        response.status_code,
+                        f"Canvas API error {response.status_code}: {response.text}",
+                    )
+                data = response.json()
+                terms.extend(data.get("enrollment_terms", []))
+                next_url = self._extract_next_link(response)
+                next_params = None
+
         return terms
 
     async def get_courses(
@@ -71,23 +80,24 @@ class CanvasClient:
         term_ids: list[int],
         keywords: list[str],
     ) -> list[dict]:
-        params: dict[str, Any] = {"per_page": 100, "include[]": ["teachers", "term"]}
-        if term_ids:
-            params["enrollment_term_id"] = term_ids[0]
+        base_params: dict[str, Any] = {"per_page": 100, "include[]": ["teachers", "term"]}
         if keywords:
-            params["search_term"] = keywords[0]
+            base_params["search_term"] = keywords[0]
 
-        courses = await self._paginate(
-            f"{self._base_url}/api/v1/accounts/{account_id}/courses",
-            params,
-        )
+        url = f"{self._base_url}/api/v1/accounts/{account_id}/courses"
 
-        # Client-side filtering for additional term_ids and keywords
-        if len(term_ids) > 1:
-            extra_terms = set(term_ids[1:])
-            courses = [
-                c for c in courses if c.get("enrollment_term_id") in extra_terms
-            ] + [c for c in courses if c.get("enrollment_term_id") == term_ids[0]]
+        if not term_ids:
+            courses = await self._paginate(url, base_params)
+        else:
+            seen: set[int] = set()
+            courses: list[dict] = []
+            for term_id in term_ids:
+                params = {**base_params, "enrollment_term_id": term_id}
+                for course in await self._paginate(url, params):
+                    cid = course.get("id")
+                    if cid not in seen:
+                        seen.add(cid)
+                        courses.append(course)
 
         for kw in keywords[1:]:
             kw_lower = kw.lower()
@@ -96,18 +106,19 @@ class CanvasClient:
         return courses
 
     async def get_course_student_count(self, course_id: int) -> int:
-        enrollments = await self._paginate(
-            f"{self._base_url}/api/v1/courses/{course_id}/enrollments",
-            {"type[]": "StudentEnrollment", "per_page": 1, "page": 1},
-        )
-        # Canvas doesn't expose a count endpoint; use the total from Link header workaround.
-        # Fall back to fetching all and counting.
-        return len(
-            await self._paginate(
-                f"{self._base_url}/api/v1/courses/{course_id}/enrollments",
-                {"type[]": "StudentEnrollment", "per_page": 100},
+        # Single request using Canvas's total_students include — far faster than
+        # paginating all enrollments.
+        async with httpx.AsyncClient(headers=self._headers) as client:
+            response = await client.get(
+                f"{self._base_url}/api/v1/courses/{course_id}",
+                params={"include[]": "total_students"},
             )
-        )
+        if response.status_code >= 400:
+            raise CanvasAPIError(
+                response.status_code,
+                f"Canvas API error {response.status_code}: {response.text}",
+            )
+        return response.json().get("total_students", 0)
 
     async def get_course_students(self, course_id: int) -> list[dict]:
         enrollments = await self._paginate(

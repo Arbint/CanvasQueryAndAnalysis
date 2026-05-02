@@ -51,3 +51,40 @@
 .chip-input__add:hover {
   color: var(--color-btn-primary-hover);
 }
+
+.chip-input__editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.chip-input__suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 50;
+  min-width: 200px;
+  max-height: 220px;
+  overflow-y: auto;
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  list-style: none;
+  margin-top: 2px;
+}
+
+.chip-input__suggestion-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  transition: background-color var(--transition-fast);
+}
+
+.chip-input__suggestion-item:hover {
+  background-color: var(--color-bg-hover);
+  color: var(--color-text-heading);
+}

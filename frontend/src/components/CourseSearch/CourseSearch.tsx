@@ -1,18 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
+import type { Term } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
 import { AccountDropdown } from './AccountDropdown'
-import { ChipInput } from './ChipInput'
+import { ChipInput, type Suggestion } from './ChipInput'
 import { CourseList } from './CourseList'
 import './CourseSearch.css'
 
 export function CourseSearch() {
   const { selectedAccountId, courses, setCourses, updateCourseStudentCount } = useAppStore()
-  const [semesters, setSemesters] = useState<string[]>([])
+  const [terms, setTerms] = useState<Term[]>([])
+  const [selectedTermIds, setSelectedTermIds] = useState<string[]>([])
   const [keywords, setKeywords] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [countLoading, setCountLoading] = useState(false)
+
+  // Fetch terms whenever the account changes
+  useEffect(() => {
+    if (!selectedAccountId) { setTerms([]); return }
+    api.getTerms(selectedAccountId)
+      .then(setTerms)
+      .catch(() => setTerms([]))
+    setSelectedTermIds([])
+  }, [selectedAccountId])
+
+  const termSuggestions: Suggestion[] = terms.map((t) => ({
+    label: t.name,
+    value: String(t.id),
+  }))
 
   const handleSearch = async () => {
     if (!selectedAccountId) return
@@ -21,6 +37,7 @@ export function CourseSearch() {
     try {
       const result = await api.getCourses({
         account_id: selectedAccountId,
+        term_ids: selectedTermIds.map(Number),
         keywords,
       })
       setCourses(result)
@@ -55,7 +72,12 @@ export function CourseSearch() {
       <div className="course-search__filters">
         <div className="course-search__filter-row">
           <span className="course-search__filter-label">Semester</span>
-          <ChipInput values={semesters} onChange={setSemesters} placeholder="Search semester…" />
+          <ChipInput
+            values={selectedTermIds}
+            onChange={setSelectedTermIds}
+            suggestions={termSuggestions}
+            placeholder="Search semester…"
+          />
         </div>
         <div className="course-search__filter-row">
           <span className="course-search__filter-label">Keyword</span>
