@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 DB_PATH = Path(__file__).parent.parent / "db.json"
-db: dict = json.loads(DB_PATH.read_text(encoding="utf-8"))
+db: dict = json.loads(DB_PATH.read_text(encoding="utf-8-sig"))
 
 # Pre-build lookup tables once at startup
 _student_map: dict[int, dict] = {s["id"]: s for s in db["students"]}
