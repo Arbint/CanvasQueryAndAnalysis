@@ -30,3 +30,5 @@ this is a drop downlist for the user to select the available account under the c
     * Instructor
     * Semester they are in 
     * Student count, only populate when the Query student count button is pressed.
+
+If the course list is too long, add a slider to the list.

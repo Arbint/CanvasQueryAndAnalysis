@@ -27,6 +27,7 @@ What endpoints the backend will have will be determined by the frontend and the 
 ---------------
 ## Frontend
 Front end should use the mornden solution that fits the task, the programmer (you), should propose a teck stack.
+The app has an icon on the upper left coner, the icon is stored in: ./assets/uiw3d_Logo_PNG_White.png, use it also for the favicon.
 
 ### Structure of the Frontend
 The front end is primarily composed of 3 columns:
@@ -46,8 +47,10 @@ It's structure is described in here: @/knowledgeBase/appDesignComponents/Aggrega
 This is the column that desplays the list of the student generated from the course aggregation graph.
 It's structure is described in here: @/knowledgeBase/appDesignComponents/StudentList.md
 
+```NOTE``` the 3 columns has bars between them to allow user to change their width.
+
 -----------------
 
-## Extras
-The app has an icon on the upper left coner, the icon is stored in: ./assets/uiw3d_Logo_PNG_White.png, use it also for the favicon.
+## Constraints.
+The page itself does not scroll vertically, the student list and the course list has their own scroll bars if the lists are too long.
 
