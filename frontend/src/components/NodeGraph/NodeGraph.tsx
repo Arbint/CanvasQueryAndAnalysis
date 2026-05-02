@@ -99,15 +99,20 @@ function NodeGraphInner() {
 
   useEffect(() => {
     if (pendingAddCourseId == null) return
+    const rect = flowRef.current?.getBoundingClientRect()
+    const centerScreen = rect
+      ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      : { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+    const position = screenToFlowPosition(centerScreen)
     const newNode: Node = {
       id: nextId(),
       type: 'courseNode',
-      position: { x: 80, y: 80 },
+      position,
       data: { selectedCourseId: pendingAddCourseId },
     }
     setNodes((ns) => [...ns, newNode])
     setPendingAddCourseId(null)
-  }, [pendingAddCourseId, setNodes, setPendingAddCourseId])
+  }, [pendingAddCourseId, setNodes, setPendingAddCourseId, screenToFlowPosition])
 
   const handleNodeDoubleClick: NodeMouseHandler = useCallback(
     (_, node) => {
