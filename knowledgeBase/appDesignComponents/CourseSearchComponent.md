@@ -29,3 +29,4 @@ this is a drop downlist for the user to select the available account under the c
     * Course Number
     * Instructor
     * Semester they are in 
+    * Student count, only populate when the Query student count button is pressed.
