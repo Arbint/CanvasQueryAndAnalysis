@@ -1,7 +1,7 @@
 .trend-analysis {
   position: relative;
   display: grid;
-  grid-template-rows: minmax(210px, 38%) minmax(0, 1fr);
+  grid-template-rows: minmax(300px, 52%) minmax(0, 1fr);
   height: 100%;
   min-width: 0;
   overflow: hidden;
@@ -47,6 +47,7 @@
 
 .trend-graph__svg {
   display: block;
+  height: 100%;
   min-width: 100%;
 }
 
@@ -62,9 +63,20 @@
 }
 
 .trend-graph__tick,
-.trend-graph__count {
+.trend-graph__count,
+.trend-graph__x-label,
+.trend-graph__x-term {
   fill: var(--color-text-muted);
   font-size: 11px;
+}
+
+.trend-graph__x-label {
+  fill: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.trend-graph__x-term {
+  fill: var(--color-text-muted);
 }
 
 .trend-graph__line {
@@ -126,6 +138,7 @@
 }
 
 .trend-column {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -136,6 +149,10 @@
   border: 1px solid var(--color-surface-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-1);
+}
+
+.trend-column:hover {
+  border-color: var(--color-accent-cyan);
 }
 
 .trend-column__header {
@@ -168,6 +185,31 @@
 .trend-column__remove:hover {
   color: var(--color-accent-red);
   background: var(--color-bg-hover);
+}
+
+.trend-column__resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.trend-column__resize::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  right: 3px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.trend-column__resize:hover::after {
+  background: var(--color-accent-blue);
 }
 
 .trend-course-select {

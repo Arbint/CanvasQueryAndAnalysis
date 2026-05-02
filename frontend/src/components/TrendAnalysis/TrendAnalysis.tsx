@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Course, Student } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
@@ -11,6 +11,7 @@ interface TrendColumn {
   loading: boolean
   error: string | null
   students: Student[]
+  width: number
 }
 
 interface Comparison {
@@ -88,11 +89,17 @@ function safeName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
 
+function axisLabel(course: Course | null) {
+  if (!course) return 'No course'
+  return course.name.length > 24 ? `${course.name.slice(0, 21)}...` : course.name
+}
+
 export function TrendAnalysis() {
   const courses = useAppStore((state) => state.courses)
+  const setActiveStudentList = useAppStore((state) => state.setActiveStudentList)
   const [columns, setColumns] = useState<TrendColumn[]>([
-    { id: nextColumnId(), courseId: null, loading: false, error: null, students: [] },
-    { id: nextColumnId(), courseId: null, loading: false, error: null, students: [] },
+    { id: nextColumnId(), courseId: null, loading: false, error: null, students: [], width: 240 },
+    { id: nextColumnId(), courseId: null, loading: false, error: null, students: [], width: 240 },
   ])
   const [zoom, setZoom] = useState(1)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
@@ -105,16 +112,19 @@ export function TrendAnalysis() {
 
   const maxCount = Math.max(1, ...columns.map((column) => column.students.length))
   const graph = useMemo(() => {
-    const width = Math.max(520, columns.length * 180)
-    const height = 220
+    const gap = 8
+    const contentWidth = columns.reduce((sum, column) => sum + column.width, 0) + Math.max(0, columns.length - 1) * gap
+    const width = Math.max(640, contentWidth + 112)
+    const height = 320
     const padX = 56
     const padTop = 24
-    const padBottom = 38
+    const padBottom = 88
     const plotHeight = height - padTop - padBottom
-    const step = columns.length > 1 ? (width - padX * 2) / (columns.length - 1) : 0
-    const points = columns.map((column, index) => {
-      const x = columns.length === 1 ? width / 2 : padX + step * index
+    let offset = padX
+    const points = columns.map((column) => {
+      const x = offset + column.width / 2
       const y = padTop + plotHeight - (column.students.length / maxCount) * plotHeight
+      offset += column.width + gap
       return { x, y, count: column.students.length }
     })
     return { width, height, padX, padTop, padBottom, points }
@@ -147,7 +157,7 @@ export function TrendAnalysis() {
   const addColumn = () => {
     setColumns((current) => [
       ...current,
-      { id: nextColumnId(), courseId: null, loading: false, error: null, students: [] },
+      { id: nextColumnId(), courseId: null, loading: false, error: null, students: [], width: 240 },
     ])
   }
 
@@ -166,6 +176,28 @@ export function TrendAnalysis() {
   const handleCopy = async (index: number, kind: CompareKind) => {
     await navigator.clipboard.writeText(emailsString(comparisons[index][kind]))
     setMenu(null)
+  }
+
+  const startResize = (event: ReactPointerEvent, columnId: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    const startWidth = columns.find((column) => column.id === columnId)?.width ?? 240
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const width = Math.min(420, Math.max(180, startWidth + moveEvent.clientX - startX))
+      setColumns((current) =>
+        current.map((column) => (column.id === columnId ? { ...column, width } : column))
+      )
+    }
+
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
   }
 
   const activeMenu = menu ? comparisons[menu.index] : null
@@ -230,6 +262,12 @@ export function TrendAnalysis() {
                 <text className="trend-graph__count" x={point.x} y={point.y - 12} textAnchor="middle">
                   {point.count}
                 </text>
+                <text className="trend-graph__x-label" x={point.x} y={graph.height - 54} textAnchor="middle">
+                  {axisLabel(selectedCourses[index])}
+                </text>
+                <text className="trend-graph__x-term" x={point.x} y={graph.height - 36} textAnchor="middle">
+                  {selectedCourses[index]?.term_name ?? ''}
+                </text>
               </g>
             ))}
           </svg>
@@ -249,7 +287,12 @@ export function TrendAnalysis() {
           {columns.map((column, index) => {
             const course = selectedCourses[index]
             return (
-              <article className="trend-column" key={column.id}>
+              <article
+                className="trend-column"
+                key={column.id}
+                style={{ width: column.width, minWidth: column.width }}
+                onDoubleClick={() => setActiveStudentList(column.students)}
+              >
                 <div className="trend-column__header">
                   <span className="trend-column__number">{index + 1}</span>
                   <button className="trend-column__remove" title="Remove column" onClick={() => removeColumn(column.id)}>
@@ -284,6 +327,13 @@ export function TrendAnalysis() {
                     </li>
                   ))}
                 </ul>
+                <div
+                  className="trend-column__resize"
+                  role="separator"
+                  aria-orientation="vertical"
+                  title="Resize column"
+                  onPointerDown={(event) => startResize(event, column.id)}
+                />
               </article>
             )
           })}
