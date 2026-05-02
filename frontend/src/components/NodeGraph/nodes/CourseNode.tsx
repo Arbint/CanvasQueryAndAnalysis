@@ -41,11 +41,8 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
 
   return (
     <div
-      className="course-select"
+      className="course-select nodrag"
       ref={containerRef}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-      onDoubleClick={(e) => e.stopPropagation()}
     >
       <button
         className="course-select__trigger"
@@ -80,7 +77,8 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
                 <li key={c.id}>
                   <button
                     className={`course-select__option${c.id === value ? ' course-select__option--selected' : ''}`}
-                    onMouseDown={(e) => { e.preventDefault(); onChange(c.id); setOpen(false) }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { onChange(c.id); setOpen(false) }}
                   >
                     {c.name}
                   </button>
