@@ -64,13 +64,13 @@
   background-color: var(--color-bg-hover);
 }
 
-.course-list__count {
+.course-list__row td.course-list__count {
   text-align: right;
   color: var(--color-accent-cyan);
   font-variant-numeric: tabular-nums;
 }
 
-.course-list__count--low {
+.course-list__row td.course-list__count--low {
   color: var(--color-accent-red);
 }
 
