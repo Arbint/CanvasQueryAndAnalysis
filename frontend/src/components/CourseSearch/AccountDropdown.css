@@ -1,0 +1,29 @@
+.account-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+.account-dropdown__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.account-dropdown__select {
+  width: 100%;
+}
+
+.account-dropdown--loading,
+.account-dropdown--error {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.account-dropdown--error {
+  color: var(--color-accent-red);
+}

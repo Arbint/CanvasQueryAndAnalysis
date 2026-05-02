@@ -1,0 +1,99 @@
+@echo off
+setlocal
+
+set "ROOT=%~dp0"
+set "BACKEND=%ROOT%backend"
+set "FRONTEND=%ROOT%frontend"
+
+echo =========================================
+echo   Canvas Query ^& Analysis  --  Launcher
+echo =========================================
+echo.
+
+REM -- Python check
+where python >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Python not found. Install Python 3.11+ and add it to PATH.
+    pause & exit /b 1
+)
+echo [OK] Python
+
+REM -- Node check
+where node >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Node.js not found. Install Node.js 20+ and add it to PATH.
+    pause & exit /b 1
+)
+echo [OK] Node.js
+
+REM -- Canvas credentials
+REM    Accepts user/system env vars or backend\.env file
+if defined CANVAS_API_TOKEN if defined CANVAS_API_URL (
+    echo [OK] Canvas credentials ^(environment variables^)
+    goto :creds_ok
+)
+if exist "%BACKEND%\.env" (
+    echo [OK] Canvas credentials ^(backend\.env^)
+    goto :creds_ok
+)
+echo.
+echo [ERROR] Canvas credentials not found.
+echo.
+echo   Option 1 - Set user environment variables:
+echo     CANVAS_API_TOKEN = your_token_here
+echo     CANVAS_API_URL   = https://your.canvas.instance
+echo.
+echo   Option 2 - Create the file backend\.env with those two lines.
+echo.
+pause & exit /b 1
+:creds_ok
+
+REM -- Backend dependencies
+python -c "import uvicorn, fastapi, httpx, pydantic_settings" >nul 2>&1
+if errorlevel 1 (
+    echo Installing backend dependencies...
+    pip install -r "%BACKEND%\requirements.txt"
+    if errorlevel 1 (
+        echo [ERROR] pip install failed.
+        pause & exit /b 1
+    )
+    echo [OK] Backend dependencies installed
+) else (
+    echo [OK] Backend dependencies
+)
+
+REM -- Frontend dependencies
+if not exist "%FRONTEND%\node_modules" (
+    echo Installing frontend dependencies...
+    pushd "%FRONTEND%"
+    npm install
+    if errorlevel 1 (
+        popd
+        echo [ERROR] npm install failed.
+        pause & exit /b 1
+    )
+    popd
+    echo [OK] Frontend dependencies installed
+) else (
+    echo [OK] Frontend dependencies
+)
+
+echo.
+echo Starting servers...
+echo.
+
+REM -- Launch backend
+start "Canvas Backend" cmd /k "cd /d "%BACKEND%" && uvicorn app.main:app --reload"
+
+timeout /t 2 /nobreak >nul
+
+REM -- Launch frontend
+start "Canvas Frontend" cmd /k "cd /d "%FRONTEND%" && npm run dev"
+
+echo   Backend   ^>  http://localhost:8000
+echo   Frontend  ^>  http://localhost:5173
+echo.
+echo Both servers are running in separate windows.
+echo Close those windows to stop the servers.
+echo.
+pause

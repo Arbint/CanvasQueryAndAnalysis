@@ -1,0 +1,74 @@
+.student-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--color-bg-overlay);
+  border-left: 1px solid var(--color-surface-border);
+}
+
+.student-list__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-surface-border);
+  align-items: center;
+}
+
+.student-list__filter,
+.student-list__sort {
+  flex: 1;
+  min-width: 100px;
+  font-size: var(--font-size-sm);
+}
+
+.student-list__action {
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  white-space: nowrap;
+}
+
+.student-list__count {
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+.student-list__scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.student-list__empty {
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.student-list__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.student-list__table th {
+  position: sticky;
+  top: 0;
+  background-color: var(--color-bg-overlay);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+.student-list__table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.student-list__table tr:hover td {
+  background-color: var(--color-bg-hover);
+}
