@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react'
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Course, Student } from '../../api/types'
 import { union } from '../../lib/setOperations'
@@ -84,84 +84,25 @@ const makeColumn = (): TrendColumn => ({
   width: 240,
 })
 
-// --- Null-rendering sync component for collection columns ---
-
-function CollectionSync({
-  columnId,
-  filters,
-  setColumns,
-}: {
-  columnId: string
-  filters: CollectionFilters
-  setColumns: Dispatch<SetStateAction<TrendColumn[]>>
-}) {
-  const courses = useAppStore((s) => s.courses)
-  const cacheRef = useRef<Record<number, Student[]>>({})
-
-  const matchedCourses = useMemo(
-    () => courses.filter((c) => courseMatchesFilters(c, filters.selectedTerms, filters.department, filters.numberPattern)),
-    [courses, filters.selectedTerms, filters.department, filters.numberPattern],
-  )
-
-  useEffect(() => {
-    const missing = matchedCourses.filter((c) => !(c.id in cacheRef.current))
-    const matchedCourseCount = matchedCourses.length
-
-    if (missing.length === 0) {
-      const students = matchedCourses.length > 0 ? union(...matchedCourses.map((c) => cacheRef.current[c.id] ?? [])) : []
-      setColumns((cols) =>
-        cols.map((col) =>
-          col.id === columnId && col.mode === 'collection'
-            ? { ...col, students, matchedCourseCount, loading: false }
-            : col,
-        ),
-      )
-      return
-    }
-
-    setColumns((cols) =>
-      cols.map((col) =>
-        col.id === columnId && col.mode === 'collection' ? { ...col, loading: true, matchedCourseCount } : col,
-      ),
-    )
-
-    Promise.all(missing.map((c) => api.getStudents(c.id).then((s) => ({ id: c.id, students: s }))))
-      .then((results) => {
-        for (const r of results) cacheRef.current[r.id] = r.students
-        const students = matchedCourses.length > 0 ? union(...matchedCourses.map((c) => cacheRef.current[c.id] ?? [])) : []
-        setColumns((cols) =>
-          cols.map((col) =>
-            col.id === columnId && col.mode === 'collection'
-              ? { ...col, students, matchedCourseCount, loading: false, error: null }
-              : col,
-          ),
-        )
-      })
-      .catch((err) => {
-        setColumns((cols) =>
-          cols.map((col) =>
-            col.id === columnId && col.mode === 'collection'
-              ? { ...col, loading: false, error: err instanceof Error ? err.message : 'Failed to load students' }
-              : col,
-          ),
-        )
-      })
-  }, [matchedCourses, columnId, setColumns])
-
-  return null
-}
-
 // --- Collection filters UI ---
 
 function CollectionFiltersUI({
   filters,
   onChange,
+  onCollect,
+  loading,
 }: {
   filters: CollectionFilters
   onChange: (updated: CollectionFilters) => void
+  onCollect: () => void
+  loading: boolean
 }) {
   const courses = useAppStore((s) => s.courses)
   const availableTerms = useMemo(() => [...new Set(courses.map((c) => c.term_name))].sort(), [courses])
+  const matchedCount = useMemo(
+    () => courses.filter((c) => courseMatchesFilters(c, filters.selectedTerms, filters.department, filters.numberPattern)).length,
+    [courses, filters.selectedTerms, filters.department, filters.numberPattern],
+  )
 
   const toggleTerm = (term: string) =>
     onChange({
@@ -206,6 +147,16 @@ function CollectionFiltersUI({
           value={filters.numberPattern}
           onChange={(e) => onChange({ ...filters, numberPattern: e.target.value })}
         />
+      </div>
+      <div className="trend-collect-row">
+        <span className="collection-empty">{matchedCount} matched</span>
+        <button
+          className="trend-collect-btn"
+          onClick={onCollect}
+          disabled={loading || matchedCount === 0}
+        >
+          {loading ? 'Loading…' : 'Collect'}
+        </button>
       </div>
     </div>
   )
@@ -297,6 +248,8 @@ export function TrendAnalysis() {
   const [zoom, setZoom] = useState(1)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [menu, setMenu] = useState<{ index: number; x: number; y: number } | null>(null)
+  // Per-column fetch cache: columnId → courseId → Student[]
+  const collectCacheRef = useRef<Record<string, Record<number, Student[]>>>({})
 
   const selectedCourses = columns.map((col) => courses.find((c) => c.id === col.courseId) ?? null)
   const comparisons = columns.map((col, i) =>
@@ -359,6 +312,48 @@ export function TrendAnalysis() {
     setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, collection } : col))
   }
 
+  const handleCollect = async (columnId: string) => {
+    const column = columns.find((col) => col.id === columnId)
+    if (!column || column.mode !== 'collection') return
+    const { selectedTerms, department, numberPattern } = column.collection
+    const matched = courses.filter((c) => courseMatchesFilters(c, selectedTerms, department, numberPattern))
+    if (matched.length === 0) return
+
+    if (!collectCacheRef.current[columnId]) collectCacheRef.current[columnId] = {}
+    const cache = collectCacheRef.current[columnId]
+    const missing = matched.filter((c) => !(c.id in cache))
+
+    setColumns((curr) =>
+      curr.map((col) =>
+        col.id === columnId ? { ...col, loading: true, error: null, matchedCourseCount: matched.length } : col,
+      ),
+    )
+    try {
+      if (missing.length > 0) {
+        const results = await Promise.all(
+          missing.map((c) => api.getStudents(c.id).then((s) => ({ id: c.id, students: s }))),
+        )
+        for (const r of results) cache[r.id] = r.students
+      }
+      const students = union(...matched.map((c) => cache[c.id] ?? []))
+      setColumns((curr) =>
+        curr.map((col) =>
+          col.id === columnId
+            ? { ...col, students, matchedCourseCount: matched.length, loading: false }
+            : col,
+        ),
+      )
+    } catch (err) {
+      setColumns((curr) =>
+        curr.map((col) =>
+          col.id === columnId
+            ? { ...col, loading: false, error: err instanceof Error ? err.message : 'Failed to load students' }
+            : col,
+        ),
+      )
+    }
+  }
+
   const addColumn = () => setColumns((curr) => [...curr, makeColumn()])
 
   const removeColumn = (columnId: string) => {
@@ -406,11 +401,6 @@ export function TrendAnalysis() {
 
   return (
     <div className="trend-analysis" onClick={() => setMenu(null)}>
-      {columns
-        .filter((col) => col.mode === 'collection')
-        .map((col) => (
-          <CollectionSync key={col.id} columnId={col.id} filters={col.collection} setColumns={setColumns} />
-        ))}
 
       <section className="trend-graph" onContextMenu={(e) => e.preventDefault()}>
         <div className="trend-graph__toolbar">
@@ -533,6 +523,8 @@ export function TrendAnalysis() {
                   <CollectionFiltersUI
                     filters={column.collection}
                     onChange={(updated) => setCollectionFilters(column.id, updated)}
+                    onCollect={() => void handleCollect(column.id)}
+                    loading={column.loading}
                   />
                 )}
 

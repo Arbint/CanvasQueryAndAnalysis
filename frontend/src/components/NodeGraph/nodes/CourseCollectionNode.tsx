@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { Course, Student } from '../../../api/types'
 import { union } from '../../../lib/setOperations'
@@ -20,7 +20,6 @@ function parseCourseNumber(courseCode: string): string {
 }
 
 function matchesWildcard(pattern: string, value: string): boolean {
-  // Each * matches exactly one character
   const regexStr = [...pattern]
     .map((c) => (c === '*' ? '.' : c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     .join('')
@@ -52,8 +51,9 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
   const [selectedTerms, setSelectedTerms] = useState<string[]>([])
   const [department, setDepartment] = useState('')
   const [numberPattern, setNumberPattern] = useState('')
-  const [fetchedStudents, setFetchedStudents] = useState<Record<number, Student[]>>({})
   const [fetching, setFetching] = useState(false)
+  const [, forceUpdate] = useState(0)
+  const fetchCacheRef = useRef<Record<number, Student[]>>({})
 
   const availableTerms = useMemo(
     () => [...new Set(courses.map((c) => c.term_name))].sort(),
@@ -65,32 +65,29 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
     [courses, selectedTerms, department, numberPattern],
   )
 
-  useEffect(() => {
-    const missing = matchedCourses.filter((c) => !(c.id in fetchedStudents))
-    if (missing.length === 0) return
+  const handleCollect = async () => {
+    if (fetching || matchedCourses.length === 0) return
+    const missing = matchedCourses.filter((c) => !(c.id in fetchCacheRef.current))
     setFetching(true)
-    Promise.all(missing.map(async (c) => ({ id: c.id, students: await api.getStudents(c.id) })))
-      .then((results) => {
-        setFetchedStudents((prev) => {
-          const next = { ...prev }
-          for (const r of results) next[r.id] = r.students
-          return next
-        })
-      })
-      .finally(() => setFetching(false))
-  }, [matchedCourses])
-
-  useEffect(() => {
-    const lists = matchedCourses.map((c) => fetchedStudents[c.id] ?? [])
-    ;(data as CourseCollectionNodeData).students = lists.length > 0 ? union(...lists) : []
-  }, [matchedCourses, fetchedStudents])
+    try {
+      if (missing.length > 0) {
+        const results = await Promise.all(
+          missing.map(async (c) => ({ id: c.id, students: await api.getStudents(c.id) })),
+        )
+        for (const r of results) fetchCacheRef.current[r.id] = r.students
+      }
+      const lists = matchedCourses.map((c) => fetchCacheRef.current[c.id] ?? [])
+      ;(data as CourseCollectionNodeData).students = lists.length > 0 ? union(...lists) : []
+      forceUpdate((n) => n + 1)
+    } finally {
+      setFetching(false)
+    }
+  }
 
   const toggleTerm = (term: string) =>
     setSelectedTerms((prev) =>
       prev.includes(term) ? prev.filter((t) => t !== term) : [...prev, term],
     )
-
-  const pendingCount = matchedCourses.filter((c) => !(c.id in fetchedStudents)).length
 
   return (
     <div className="node node--collection">
@@ -141,10 +138,19 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
           />
         </div>
 
-        <div className="collection-section-label">
-          {matchedCourses.length} course{matchedCourses.length !== 1 ? 's' : ''} matched
-          {fetching && pendingCount > 0 && ` · loading ${pendingCount}…`}
+        <div className="collection-collect-row nodrag">
+          <span className="collection-section-label">
+            {matchedCourses.length} course{matchedCourses.length !== 1 ? 's' : ''} matched
+          </span>
+          <button
+            className="collection-collect-btn"
+            onClick={handleCollect}
+            disabled={fetching || matchedCourses.length === 0}
+          >
+            {fetching ? 'Loading…' : 'Collect'}
+          </button>
         </div>
+
         <div className="collection-course-list nodrag">
           {matchedCourses.length === 0 ? (
             <span className="collection-empty">No courses match filters</span>

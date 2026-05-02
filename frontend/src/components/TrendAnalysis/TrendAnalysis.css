@@ -431,3 +431,31 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
+
+.trend-collect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.trend-collect-btn {
+  padding: 2px var(--space-3);
+  border: 1px solid var(--color-accent-green);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-green);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.trend-collect-btn:hover:not(:disabled) {
+  background: var(--color-accent-green);
+  color: var(--color-bg-base);
+}
+
+.trend-collect-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
