@@ -1,0 +1,1 @@
+* for each node, add an expand button on the upper right corner, when clicked, the node expand it's size and display the list of the sutdent it outputs on the node. click on it again to toggle it back to not show the student list on it.
