@@ -22,6 +22,15 @@ export function intersect(...lists: Student[][]): Student[] {
   )
 }
 
+export function diff(a: Student[], b: Student[]): Student[] {
+  const bIds = new Set(b.map((s) => s.id))
+  const aIds = new Set(a.map((s) => s.id))
+  return [
+    ...a.filter((s) => !bIds.has(s.id)),
+    ...b.filter((s) => !aIds.has(s.id)),
+  ]
+}
+
 export function subtract(from: Student[], ...subtractLists: Student[][]): Student[] {
   const removeIds = new Set<number>()
   for (const list of subtractLists) {

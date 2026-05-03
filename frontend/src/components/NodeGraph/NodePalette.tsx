@@ -13,6 +13,7 @@ const NODE_TYPES = [
   { type: 'unionNode', label: 'Union' },
   { type: 'intersectNode', label: 'Intersect' },
   { type: 'subtractNode', label: 'Subtract' },
+  { type: 'diffNode', label: 'Diff' },
 ]
 
 export function NodePalette({ position, onSelect, onClose }: NodePaletteProps) {

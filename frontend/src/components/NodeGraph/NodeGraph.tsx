@@ -16,6 +16,7 @@ import { useAppStore } from '../../store/appStore'
 import { evaluateGraph } from './graphEngine'
 import { CourseCollectionNode } from './nodes/CourseCollectionNode'
 import { CourseNode, type CourseNodeData } from './nodes/CourseNode'
+import { DiffNode } from './nodes/DiffNode'
 import { IntersectNode } from './nodes/IntersectNode'
 import { SubtractNode } from './nodes/SubtractNode'
 import { UnionNode } from './nodes/UnionNode'
@@ -28,6 +29,7 @@ const NODE_TYPE_MAP = {
   unionNode: UnionNode,
   intersectNode: IntersectNode,
   subtractNode: SubtractNode,
+  diffNode: DiffNode,
 }
 
 let nodeIdCounter = 0

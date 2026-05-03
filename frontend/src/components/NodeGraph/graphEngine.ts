@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { Student } from '../../api/types'
-import { intersect, subtract, union } from '../../lib/setOperations'
+import { diff, intersect, subtract, union } from '../../lib/setOperations'
 
 export class GraphCycleError extends Error {
   constructor() {
@@ -84,6 +84,12 @@ export function evaluateGraph(
       const fromList = fromInput ? results[fromInput.sourceNodeId] ?? [] : []
       const subLists = subtractInputs.map((i) => results[i.sourceNodeId] ?? [])
       results[nodeId] = subtract(fromList, ...subLists)
+    } else if (type === 'diffNode') {
+      const aInput = inputs.find((i) => i.targetHandle === 'a')
+      const bInput = inputs.find((i) => i.targetHandle === 'b')
+      const aList = aInput ? results[aInput.sourceNodeId] ?? [] : []
+      const bList = bInput ? results[bInput.sourceNodeId] ?? [] : []
+      results[nodeId] = diff(aList, bList)
     } else {
       results[nodeId] = []
     }
