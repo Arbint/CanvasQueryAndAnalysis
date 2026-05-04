@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useMemo, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { Course, Student } from '../../../api/types'
@@ -9,6 +9,9 @@ import '../NodeGraph.css'
 
 export interface CourseCollectionNodeData extends Record<string, unknown> {
   students?: Student[]
+  selectedTerms?: string[]
+  department?: string
+  numberPattern?: string
 }
 
 function parseDepartment(courseCode: string): string {
@@ -45,12 +48,14 @@ function courseMatchesFilters(
 
 export function CourseCollectionNode({ id, data }: NodeProps) {
   const courses = useAppStore((s) => s.courses)
+  const { setNodes } = useReactFlow()
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
   const studentCount = useNodeStudentCount(id)
+  const nodeData = data as CourseCollectionNodeData
 
-  const [selectedTerms, setSelectedTerms] = useState<string[]>([])
-  const [department, setDepartment] = useState('')
-  const [numberPattern, setNumberPattern] = useState('')
+  const [selectedTerms, setSelectedTerms] = useState<string[]>(nodeData.selectedTerms ?? [])
+  const [department, setDepartment] = useState(nodeData.department ?? '')
+  const [numberPattern, setNumberPattern] = useState(nodeData.numberPattern ?? '')
   const [fetching, setFetching] = useState(false)
   const [, forceUpdate] = useState(0)
   const fetchCacheRef = useRef<Record<number, Student[]>>({})
@@ -77,17 +82,32 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
         for (const r of results) fetchCacheRef.current[r.id] = r.students
       }
       const lists = matchedCourses.map((c) => fetchCacheRef.current[c.id] ?? [])
-      ;(data as CourseCollectionNodeData).students = lists.length > 0 ? union(...lists) : []
+      const students = lists.length > 0 ? union(...lists) : []
+      setNodes((nodes) => nodes.map((node) => (
+        node.id === id ? { ...node, data: { ...node.data, students } } : node
+      )))
+      nodeData.students = students
       forceUpdate((n) => n + 1)
     } finally {
       setFetching(false)
     }
   }
 
-  const toggleTerm = (term: string) =>
-    setSelectedTerms((prev) =>
-      prev.includes(term) ? prev.filter((t) => t !== term) : [...prev, term],
-    )
+  const updateFilters = (filters: Pick<CourseCollectionNodeData, 'selectedTerms' | 'department' | 'numberPattern'>) => {
+    setSelectedTerms(filters.selectedTerms ?? [])
+    setDepartment(filters.department ?? '')
+    setNumberPattern(filters.numberPattern ?? '')
+    setNodes((nodes) => nodes.map((node) => (
+      node.id === id ? { ...node, data: { ...node.data, ...filters } } : node
+    )))
+  }
+
+  const toggleTerm = (term: string) => {
+    const nextTerms = selectedTerms.includes(term)
+      ? selectedTerms.filter((t) => t !== term)
+      : [...selectedTerms, term]
+    updateFilters({ selectedTerms: nextTerms, department, numberPattern })
+  }
 
   return (
     <div className="node node--collection">
@@ -124,7 +144,7 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
             className="nodrag"
             placeholder="e.g. ANGD"
             value={department}
-            onChange={(e) => setDepartment(e.target.value)}
+            onChange={(e) => updateFilters({ selectedTerms, department: e.target.value, numberPattern })}
           />
         </div>
 
@@ -134,7 +154,7 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
             className="nodrag"
             placeholder="e.g. 3*** or 3*7*"
             value={numberPattern}
-            onChange={(e) => setNumberPattern(e.target.value)}
+            onChange={(e) => updateFilters({ selectedTerms, department, numberPattern: e.target.value })}
           />
         </div>
 

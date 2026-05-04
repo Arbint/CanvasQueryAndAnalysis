@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../../api/client'
 import type { Course, Student } from '../../api/types'
 import { union } from '../../lib/setOperations'
 import { useAppStore } from '../../store/appStore'
+import type { TrendColumnSnapshot } from '../../store/appStore'
 import { downloadCSV, emailsString } from '../StudentList/exportUtils'
 import './TrendAnalysis.css'
 
@@ -83,6 +84,31 @@ const makeColumn = (): TrendColumn => ({
   students: [],
   width: 240,
 })
+
+function columnFromSnapshot(snapshot: TrendColumnSnapshot): TrendColumn {
+  return {
+    id: snapshot.id,
+    mode: snapshot.mode,
+    courseId: snapshot.courseId,
+    collection: snapshot.collection,
+    matchedCourseCount: snapshot.matchedCourseCount,
+    loading: false,
+    error: null,
+    students: [],
+    width: snapshot.width,
+  }
+}
+
+function columnToSnapshot(column: TrendColumn): TrendColumnSnapshot {
+  return {
+    id: column.id,
+    mode: column.mode,
+    courseId: column.courseId,
+    collection: column.collection,
+    matchedCourseCount: column.matchedCourseCount,
+    width: column.width,
+  }
+}
 
 // --- Collection filters UI ---
 
@@ -244,12 +270,70 @@ function axisTermLabel(column: TrendColumn, course: Course | null): string {
 export function TrendAnalysis() {
   const courses = useAppStore((s) => s.courses)
   const setActiveStudentList = useAppStore((s) => s.setActiveStudentList)
+  const setTrendColumns = useAppStore((s) => s.setTrendColumns)
+  const pendingTrendColumns = useAppStore((s) => s.pendingTrendColumns)
+  const setPendingTrendColumns = useAppStore((s) => s.setPendingTrendColumns)
+  const setLoadStatus = useAppStore((s) => s.setLoadStatus)
   const [columns, setColumns] = useState<TrendColumn[]>([makeColumn(), makeColumn()])
   const [zoom, setZoom] = useState(1)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [menu, setMenu] = useState<{ index: number; x: number; y: number } | null>(null)
   // Per-column fetch cache: columnId → courseId → Student[]
   const collectCacheRef = useRef<Record<string, Record<number, Student[]>>>({})
+
+  useEffect(() => {
+    setTrendColumns(columns.map(columnToSnapshot))
+  }, [columns, setTrendColumns])
+
+  useEffect(() => {
+    if (!pendingTrendColumns) return
+    const restoreTrend = async () => {
+      setLoadStatus('Populating trend analysis...')
+      const restored = pendingTrendColumns.length > 0
+        ? pendingTrendColumns.map(columnFromSnapshot)
+        : [makeColumn(), makeColumn()]
+      setColumns(restored.map((column) => (
+        column.mode === 'course' && column.courseId
+          ? { ...column, loading: true }
+          : column.mode === 'collection'
+            ? { ...column, loading: true }
+            : column
+      )))
+
+      const loaded = await Promise.all(restored.map(async (column) => {
+        if (column.mode === 'course' && column.courseId) {
+          try {
+            return { ...column, students: await api.getStudents(column.courseId), loading: false }
+          } catch (error) {
+            return { ...column, loading: false, error: error instanceof Error ? error.message : 'Unable to load students' }
+          }
+        }
+
+        if (column.mode === 'collection') {
+          const { selectedTerms, department, numberPattern } = column.collection
+          const matched = courses.filter((c) => courseMatchesFilters(c, selectedTerms, department, numberPattern))
+          if (matched.length === 0) return { ...column, matchedCourseCount: 0, loading: false }
+          try {
+            const lists = await Promise.all(matched.map((course) => api.getStudents(course.id)))
+            return {
+              ...column,
+              matchedCourseCount: matched.length,
+              students: union(...lists),
+              loading: false,
+            }
+          } catch (error) {
+            return { ...column, matchedCourseCount: matched.length, loading: false, error: error instanceof Error ? error.message : 'Failed to load students' }
+          }
+        }
+
+        return column
+      }))
+      setColumns(loaded)
+      setPendingTrendColumns(null)
+      setLoadStatus(null)
+    }
+    void restoreTrend()
+  }, [courses, pendingTrendColumns, setLoadStatus, setPendingTrendColumns])
 
   const selectedCourses = columns.map((col) => courses.find((c) => c.id === col.courseId) ?? null)
   const comparisons = columns.map((col, i) =>

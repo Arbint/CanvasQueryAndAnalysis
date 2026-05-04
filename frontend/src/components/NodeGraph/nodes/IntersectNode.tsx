@@ -7,19 +7,26 @@ const MIN_INPUTS = 2
 const FIRST_HANDLE_TOP = 56
 const ROW_HEIGHT = 28
 
-export function IntersectNode({ id }: NodeProps) {
-  const [inputCount, setInputCount] = useState(MIN_INPUTS)
-  const { setEdges } = useReactFlow()
+export function IntersectNode({ id, data }: NodeProps) {
+  const [inputCount, setInputCount] = useState(Number(data.inputCount ?? MIN_INPUTS))
+  const { setEdges, setNodes } = useReactFlow()
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
   const studentCount = useNodeStudentCount(id)
 
-  const addInput = () => setInputCount((n) => n + 1)
+  const setPersistedInputCount = (nextCount: number) => {
+    setInputCount(nextCount)
+    setNodes((nodes) => nodes.map((node) => (
+      node.id === id ? { ...node, data: { ...node.data, inputCount: nextCount } } : node
+    )))
+  }
+
+  const addInput = () => setPersistedInputCount(inputCount + 1)
 
   const removeInput = (index: number, e: React.MouseEvent) => {
     if (!e.altKey || inputCount <= MIN_INPUTS) return
     const handleId = `input-${index}`
     setEdges((edges) => edges.filter((edge) => !(edge.target === id && edge.targetHandle === handleId)))
-    setInputCount((n) => n - 1)
+    setPersistedInputCount(inputCount - 1)
   }
 
   return (

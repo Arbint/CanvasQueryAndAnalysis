@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Term } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
@@ -8,13 +8,28 @@ import { CourseList } from './CourseList'
 import './CourseSearch.css'
 
 export function CourseSearch() {
-  const { selectedAccountId, courses, setCourses, updateCourseStudentCount, setPendingAddCourseId } = useAppStore()
+  const {
+    selectedAccountId,
+    setSelectedAccountId,
+    courses,
+    setCourses,
+    updateCourseStudentCount,
+    setPendingAddCourseId,
+    courseSearchSettings,
+    setCourseSearchSettings,
+    pendingSessionLoad,
+    setPendingSessionLoad,
+    setPendingGraphSnapshot,
+    setPendingTrendColumns,
+    setLoadStatus,
+  } = useAppStore()
   const [terms, setTerms] = useState<Term[]>([])
-  const [selectedTermIds, setSelectedTermIds] = useState<string[]>([])
-  const [keywords, setKeywords] = useState<string[]>([])
+  const [selectedTermIds, setSelectedTermIds] = useState<string[]>(courseSearchSettings.selectedTermIds)
+  const [keywords, setKeywords] = useState<string[]>(courseSearchSettings.keywords)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [countLoading, setCountLoading] = useState(false)
+  const restoringSessionRef = useRef(false)
 
   // Fetch terms whenever the account changes
   useEffect(() => {
@@ -22,8 +37,12 @@ export function CourseSearch() {
     api.getTerms(selectedAccountId)
       .then(setTerms)
       .catch(() => setTerms([]))
-    setSelectedTermIds([])
+    if (!restoringSessionRef.current) setSelectedTermIds([])
   }, [selectedAccountId])
+
+  useEffect(() => {
+    setCourseSearchSettings({ selectedTermIds, keywords })
+  }, [selectedTermIds, keywords, setCourseSearchSettings])
 
   const termSuggestions: Suggestion[] = terms.map((t) => ({
     label: t.name,
@@ -47,6 +66,58 @@ export function CourseSearch() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!pendingSessionLoad) return
+    const loadSession = async () => {
+      const { courseSearch, graph, trend } = pendingSessionLoad
+      restoringSessionRef.current = true
+      setLoadStatus('Loading search...')
+      setError(null)
+      setSelectedAccountId(courseSearch.selectedAccountId)
+      setSelectedTermIds(courseSearch.selectedTermIds)
+      setKeywords(courseSearch.keywords)
+      setCourses([])
+
+      if (!courseSearch.selectedAccountId) {
+        setPendingGraphSnapshot(graph)
+        setPendingTrendColumns(trend.columns)
+        setPendingSessionLoad(null)
+        setLoadStatus(null)
+        restoringSessionRef.current = false
+        return
+      }
+
+      setLoading(true)
+      try {
+        const result = await api.getCourses({
+          account_id: courseSearch.selectedAccountId,
+          term_ids: courseSearch.selectedTermIds.map(Number),
+          keywords: courseSearch.keywords,
+        })
+        setCourses(result)
+        setLoadStatus('Restoring workspace...')
+        setPendingGraphSnapshot(graph)
+        setPendingTrendColumns(trend.columns)
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Load failed')
+        setLoadStatus(null)
+      } finally {
+        setLoading(false)
+        setPendingSessionLoad(null)
+        restoringSessionRef.current = false
+      }
+    }
+    void loadSession()
+  }, [
+    pendingSessionLoad,
+    setCourses,
+    setLoadStatus,
+    setPendingGraphSnapshot,
+    setPendingSessionLoad,
+    setPendingTrendColumns,
+    setSelectedAccountId,
+  ])
 
   const handleQueryCounts = async () => {
     if (courses.length === 0) return

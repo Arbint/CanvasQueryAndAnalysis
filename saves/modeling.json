@@ -1,0 +1,192 @@
+{
+  "version": 1,
+  "savedAt": "2026-05-04T21:48:14.307Z",
+  "courseSearch": {
+    "selectedAccountId": 137,
+    "selectedTermIds": [
+      "458",
+      "484"
+    ],
+    "keywords": [
+      "ANGD"
+    ]
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "node-1",
+        "type": "courseNode",
+        "position": {
+          "x": 193.89401842201121,
+          "y": 303.45491372284425
+        },
+        "data": {
+          "selectedCourseId": 56136
+        },
+        "zIndex": 1
+      },
+      {
+        "id": "node-2",
+        "type": "courseNode",
+        "position": {
+          "x": 204.29115581690493,
+          "y": 144.38905856461918
+        },
+        "data": {
+          "selectedCourseId": 52258
+        },
+        "zIndex": 1
+      },
+      {
+        "id": "node-3",
+        "type": "subtractNode",
+        "position": {
+          "x": 440.99589146148014,
+          "y": 175.80176352110635
+        },
+        "data": {},
+        "zIndex": 1
+      },
+      {
+        "id": "node-5",
+        "type": "courseNode",
+        "position": {
+          "x": 186.44809024606855,
+          "y": 771.9330352229001
+        },
+        "data": {
+          "selectedCourseId": 56157
+        },
+        "zIndex": 1
+      },
+      {
+        "id": "node-6",
+        "type": "courseNode",
+        "position": {
+          "x": 167.11866012118668,
+          "y": 624.4809435761164
+        },
+        "data": {
+          "selectedCourseId": 52279
+        },
+        "zIndex": 1
+      },
+      {
+        "id": "node-7",
+        "type": "subtractNode",
+        "position": {
+          "x": 490.65872640182965,
+          "y": 672.8526765745864
+        },
+        "data": {},
+        "zIndex": 1
+      },
+      {
+        "id": "node-8",
+        "type": "commentBoxNode",
+        "position": {
+          "x": 144.09275407087034,
+          "y": 74.44594607591226
+        },
+        "data": {
+          "label": "Env II - III",
+          "color": "blue",
+          "childIds": [
+            "node-1",
+            "node-2",
+            "node-3"
+          ]
+        },
+        "style": {
+          "width": 420,
+          "height": 260
+        },
+        "width": 533,
+        "height": 371,
+        "zIndex": 0
+      },
+      {
+        "id": "node-9",
+        "type": "commentBoxNode",
+        "position": {
+          "x": 138.05230715684473,
+          "y": 514.1904814169739
+        },
+        "data": {
+          "label": "Character Modeling I - II",
+          "color": "green",
+          "childIds": [
+            "node-5",
+            "node-6",
+            "node-7"
+          ]
+        },
+        "style": {
+          "width": 420,
+          "height": 260
+        },
+        "width": 592,
+        "height": 382,
+        "zIndex": 0
+      }
+    ],
+    "edges": [
+      {
+        "id": "xy-edge__node-2output-node-3from",
+        "source": "node-2",
+        "sourceHandle": "output",
+        "target": "node-3",
+        "targetHandle": "from"
+      },
+      {
+        "id": "xy-edge__node-1output-node-3subtract-0",
+        "source": "node-1",
+        "sourceHandle": "output",
+        "target": "node-3",
+        "targetHandle": "subtract-0"
+      },
+      {
+        "id": "xy-edge__node-6output-node-7from",
+        "source": "node-6",
+        "sourceHandle": "output",
+        "target": "node-7",
+        "targetHandle": "from"
+      },
+      {
+        "id": "xy-edge__node-5output-node-7subtract-0",
+        "source": "node-5",
+        "sourceHandle": "output",
+        "target": "node-7",
+        "targetHandle": "subtract-0"
+      }
+    ]
+  },
+  "trend": {
+    "columns": [
+      {
+        "id": "trend-column-1",
+        "mode": "course",
+        "courseId": 52279,
+        "collection": {
+          "selectedTerms": [],
+          "department": "",
+          "numberPattern": ""
+        },
+        "matchedCourseCount": 0,
+        "width": 240
+      },
+      {
+        "id": "trend-column-2",
+        "mode": "course",
+        "courseId": 56157,
+        "collection": {
+          "selectedTerms": [],
+          "department": "",
+          "numberPattern": ""
+        },
+        "matchedCourseCount": 0,
+        "width": 240
+      }
+    ]
+  }
+}

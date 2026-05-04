@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { Course, Student } from '../../../api/types'
@@ -102,6 +102,7 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
 
 export function CourseNode({ id, data }: NodeProps) {
   const courses = useAppStore((s) => s.courses)
+  const { setNodes } = useReactFlow()
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
   const studentCount = useNodeStudentCount(id)
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(
@@ -111,9 +112,20 @@ export function CourseNode({ id, data }: NodeProps) {
 
   useEffect(() => {
     if (!selectedCourseId) return
+    setNodes((nodes) => nodes.map((node) => (
+      node.id === id
+        ? { ...node, data: { ...node.data, selectedCourseId } }
+        : node
+    )))
+    ;(data as CourseNodeData).selectedCourseId = selectedCourseId
     setLoading(true)
     api.getStudents(selectedCourseId)
       .then((students) => {
+        setNodes((nodes) => nodes.map((node) => (
+          node.id === id
+            ? { ...node, data: { ...node.data, students, selectedCourseId } }
+            : node
+        )))
         ;(data as CourseNodeData).students = students
         ;(data as CourseNodeData).selectedCourseId = selectedCourseId
       })

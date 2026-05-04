@@ -7,19 +7,26 @@ const MIN_SUBTRACT = 1
 const FIRST_HANDLE_TOP = 56
 const ROW_HEIGHT = 28
 
-export function SubtractNode({ id }: NodeProps) {
-  const [subtractCount, setSubtractCount] = useState(MIN_SUBTRACT)
-  const { setEdges } = useReactFlow()
+export function SubtractNode({ id, data }: NodeProps) {
+  const [subtractCount, setSubtractCount] = useState(Number(data.subtractCount ?? MIN_SUBTRACT))
+  const { setEdges, setNodes } = useReactFlow()
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
   const studentCount = useNodeStudentCount(id)
 
-  const addSubtract = () => setSubtractCount((n) => n + 1)
+  const setPersistedSubtractCount = (nextCount: number) => {
+    setSubtractCount(nextCount)
+    setNodes((nodes) => nodes.map((node) => (
+      node.id === id ? { ...node, data: { ...node.data, subtractCount: nextCount } } : node
+    )))
+  }
+
+  const addSubtract = () => setPersistedSubtractCount(subtractCount + 1)
 
   const removeSubtract = (index: number, e: React.MouseEvent) => {
     if (!e.altKey || subtractCount <= MIN_SUBTRACT) return
     const handleId = `subtract-${index}`
     setEdges((edges) => edges.filter((edge) => !(edge.target === id && edge.targetHandle === handleId)))
-    setSubtractCount((n) => n - 1)
+    setPersistedSubtractCount(subtractCount - 1)
   }
 
   return (

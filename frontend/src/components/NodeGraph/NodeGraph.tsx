@@ -103,6 +103,10 @@ function NodeGraphInner() {
   const setActiveStudentList = useAppStore((s) => s.setActiveStudentList)
   const pendingAddCourseId = useAppStore((s) => s.pendingAddCourseId)
   const setPendingAddCourseId = useAppStore((s) => s.setPendingAddCourseId)
+  const setGraphSnapshot = useAppStore((s) => s.setGraphSnapshot)
+  const pendingGraphSnapshot = useAppStore((s) => s.pendingGraphSnapshot)
+  const setPendingGraphSnapshot = useAppStore((s) => s.setPendingGraphSnapshot)
+  const setLoadStatus = useAppStore((s) => s.setLoadStatus)
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -181,6 +185,18 @@ function NodeGraphInner() {
     setNodes((ns) => [...ns, newNode])
     setPendingAddCourseId(null)
   }, [pendingAddCourseId, setNodes, setPendingAddCourseId, screenToFlowPosition])
+
+  useEffect(() => {
+    setGraphSnapshot({ nodes, edges })
+  }, [nodes, edges, setGraphSnapshot])
+
+  useEffect(() => {
+    if (!pendingGraphSnapshot) return
+    setNodes(pendingGraphSnapshot.nodes)
+    setEdges(pendingGraphSnapshot.edges)
+    setPendingGraphSnapshot(null)
+    setLoadStatus(null)
+  }, [pendingGraphSnapshot, setEdges, setLoadStatus, setNodes, setPendingGraphSnapshot])
 
   const handleNodeDragStart: OnNodeDrag<Node> = useCallback(
     (_, node) => {
