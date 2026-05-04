@@ -1,9 +1,11 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 
 set "ROOT=%~dp0"
 set "BACKEND=%ROOT%backend"
 set "FRONTEND=%ROOT%frontend"
+set "VENV=%BACKEND%\.venv"
+set "VENV_PYTHON=%VENV%\Scripts\python.exe"
 
 echo =========================================
 echo   Canvas Query ^& Analysis  --  Launcher
@@ -17,6 +19,30 @@ if errorlevel 1 (
     pause & exit /b 1
 )
 echo [OK] Python
+
+REM -- uv check/install
+where uv >nul 2>&1
+if errorlevel 1 (
+    echo Installing uv...
+    python -m pip install --user uv
+    if errorlevel 1 (
+        echo [ERROR] uv install failed.
+        pause & exit /b 1
+    )
+    for /f "usebackq delims=" %%I in (`python -c "import pathlib, site; print(pathlib.Path(site.USER_BASE) / 'Scripts' / 'uv.exe')"`) do set "UV=%%I"
+    if not exist "!UV!" (
+        echo [ERROR] uv was installed, but uv.exe was not found in the Python user scripts directory.
+        pause & exit /b 1
+    )
+) else (
+    set "UV=uv"
+)
+"%UV%" --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] uv was installed but is not available. Restart this terminal and try again.
+    pause & exit /b 1
+)
+echo [OK] uv
 
 REM -- Node check
 where node >nul 2>&1
@@ -48,19 +74,32 @@ echo.
 pause & exit /b 1
 :creds_ok
 
-REM -- Backend dependencies
-python -c "import uvicorn, fastapi, httpx, pydantic_settings" >nul 2>&1
-if errorlevel 1 (
-    echo Installing backend dependencies...
-    pip install -r "%BACKEND%\requirements.txt"
+REM -- Backend virtual environment
+if not exist "%VENV_PYTHON%" (
+    echo Creating backend virtual environment...
+    "%UV%" venv "%VENV%" --python python
     if errorlevel 1 (
-        echo [ERROR] pip install failed.
+        echo [ERROR] uv venv failed.
         pause & exit /b 1
     )
-    echo [OK] Backend dependencies installed
+    echo [OK] Backend virtual environment created
 ) else (
-    echo [OK] Backend dependencies
+    echo [OK] Backend virtual environment
 )
+
+REM -- Backend dependencies
+echo Installing/updating backend dependencies...
+"%UV%" pip install --python "%VENV_PYTHON%" -r "%BACKEND%\requirements.txt"
+if errorlevel 1 (
+    echo [ERROR] Backend dependency install failed.
+    pause & exit /b 1
+)
+"%UV%" pip check --python "%VENV_PYTHON%" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Backend dependency check failed.
+    pause & exit /b 1
+)
+echo [OK] Backend dependencies installed
 
 REM -- Frontend dependencies
 if not exist "%FRONTEND%\node_modules" (
@@ -83,12 +122,12 @@ echo Starting servers...
 echo.
 
 REM -- Launch backend
-start "Canvas Backend" cmd /k "cd /d "%BACKEND%" && uvicorn app.main:app --reload"
+start "Canvas Backend" /D "%BACKEND%" cmd /k ""%VENV_PYTHON%" -m uvicorn app.main:app --reload"
 
 timeout /t 2 /nobreak >nul
 
 REM -- Launch frontend
-start "Canvas Frontend" cmd /k "cd /d "%FRONTEND%" && npm run dev"
+start "Canvas Frontend" /D "%FRONTEND%" cmd /k "npm run dev"
 
 echo   Backend   ^>  http://localhost:8000
 echo   Frontend  ^>  http://localhost:5173

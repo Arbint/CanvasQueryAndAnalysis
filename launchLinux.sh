@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND="$ROOT/backend"
 FRONTEND="$ROOT/frontend"
-VENV="$ROOT/.venv"
+VENV="$BACKEND/.venv"
+VENV_PYTHON="$VENV/bin/python"
 
 echo "========================================="
 echo "  Canvas Query & Analysis  --  Launcher  "
@@ -12,11 +13,31 @@ echo "========================================="
 echo
 
 # -- Python check
-if ! command -v python3 &>/dev/null; then
-    echo "[ERROR] python3 not found. Install Python 3.11+ and add it to PATH."
+if command -v python3 &>/dev/null; then
+    PYTHON="python3"
+elif command -v python &>/dev/null; then
+    PYTHON="python"
+else
+    echo "[ERROR] Python not found. Install Python 3.11+ and add it to PATH."
     exit 1
 fi
-echo "[OK] Python3"
+echo "[OK] Python"
+
+# -- uv check/install
+if command -v uv &>/dev/null; then
+    UV=(uv)
+else
+    echo "Installing uv..."
+    "$PYTHON" -m pip install --user uv
+    USER_BASE="$("$PYTHON" -m site --user-base)"
+    UV=("$USER_BASE/bin/uv")
+fi
+
+if ! "${UV[@]}" --version &>/dev/null; then
+    echo "[ERROR] uv was installed but is not available. Restart this shell and try again."
+    exit 1
+fi
+echo "[OK] uv"
 
 # -- Node check
 if ! command -v node &>/dev/null; then
@@ -43,24 +64,20 @@ else
     exit 1
 fi
 
-# -- Virtual environment
-if [ ! -d "$VENV" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv "$VENV"
-    echo "[OK] Virtual environment created"
+# -- Backend virtual environment
+if [ ! -x "$VENV_PYTHON" ]; then
+    echo "Creating backend virtual environment..."
+    "${UV[@]}" venv "$VENV" --python "$PYTHON"
+    echo "[OK] Backend virtual environment created"
+else
+    echo "[OK] Backend virtual environment"
 fi
-
-source "$VENV/bin/activate"
-echo "[OK] Virtual environment active"
 
 # -- Backend dependencies
-if ! python -c "import uvicorn, fastapi, httpx, pydantic_settings" &>/dev/null; then
-    echo "Installing backend dependencies..."
-    pip install -r "$BACKEND/requirements.txt"
-    echo "[OK] Backend dependencies installed"
-else
-    echo "[OK] Backend dependencies"
-fi
+echo "Installing/updating backend dependencies..."
+"${UV[@]}" pip install --python "$VENV_PYTHON" -r "$BACKEND/requirements.txt"
+"${UV[@]}" pip check --python "$VENV_PYTHON"
+echo "[OK] Backend dependencies installed"
 
 # -- Frontend dependencies
 if [ ! -d "$FRONTEND/node_modules" ]; then
@@ -76,7 +93,7 @@ echo "Starting servers..."
 echo
 
 find_free_port() {
-    python3 -c "
+    "$PYTHON" -c "
 import socket
 port = $1
 while True:
@@ -94,8 +111,8 @@ while True:
 BACKEND_PORT=$(find_free_port 8000)
 FRONTEND_PORT=$(find_free_port 5173)
 
-[ "$BACKEND_PORT" -ne 8000 ]  && echo "[INFO] Port 8000 busy — using $BACKEND_PORT for backend"
-[ "$FRONTEND_PORT" -ne 5173 ] && echo "[INFO] Port 5173 busy — using $FRONTEND_PORT for frontend"
+[ "$BACKEND_PORT" -ne 8000 ]  && echo "[INFO] Port 8000 busy - using $BACKEND_PORT for backend"
+[ "$FRONTEND_PORT" -ne 5173 ] && echo "[INFO] Port 5173 busy - using $FRONTEND_PORT for frontend"
 
 cleanup() {
     echo
@@ -106,10 +123,10 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-LAN_IP=$(python3 -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect(('8.8.8.8',80)); print(s.getsockname()[0]); s.close()" 2>/dev/null || echo "localhost")
+LAN_IP=$("$PYTHON" -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect(('8.8.8.8',80)); print(s.getsockname()[0]); s.close()" 2>/dev/null || echo "localhost")
 
 # -- Launch backend
-(cd "$BACKEND" && source "$VENV/bin/activate" && uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT") &
+(cd "$BACKEND" && "$VENV_PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT") &
 BACKEND_PID=$!
 
 sleep 2
