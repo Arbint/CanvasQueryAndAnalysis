@@ -34,3 +34,10 @@ export interface CourseQuery {
   term_ids?: number[]
   keywords?: string[]
 }
+
+export interface AuditMatch {
+  course_id: number
+  first_name: string
+  last_name: string
+  grade: string | null
+}

@@ -1,6 +1,9 @@
+import asyncio
+
 import respx
 from httpx import Response
 
+from app.api.routes.students import _MAX_CONCURRENT_COURSE_CHECKS
 from app.dependencies import get_canvas_client
 from app.main import app
 from app.services.canvas_client import CanvasClient
@@ -93,3 +96,91 @@ def test_student_count(client):
         resp = client.get("/api/courses/5/student-count")
     assert resp.status_code == 200
     assert resp.json()["count"] == 2
+
+
+def test_audit_requires_course_ids(client):
+    resp = client.get("/api/students/SIS-001/audit")
+    assert resp.status_code == 422  # missing param entirely
+    resp = client.get("/api/students/SIS-001/audit?course_ids=")
+    assert resp.status_code == 400  # present but blank
+
+
+def test_audit_checks_every_course_concurrently_and_returns_matches(client):
+    other_enrollment = {
+        **SAMPLE_ENROLLMENT,
+        "user": {**SAMPLE_ENROLLMENT["user"], "id": 100, "sis_user_id": "SIS-002", "sortable_name": "Roe, Rick"},
+    }
+    with respx.mock:
+        route_1 = respx.get(f"{CANVAS_BASE}/api/v1/courses/1/enrollments").mock(
+            return_value=Response(200, json=[SAMPLE_ENROLLMENT])
+        )
+        route_2 = respx.get(f"{CANVAS_BASE}/api/v1/courses/2/enrollments").mock(
+            return_value=Response(200, json=[other_enrollment])
+        )
+        route_3 = respx.get(f"{CANVAS_BASE}/api/v1/courses/3/enrollments").mock(
+            return_value=Response(200, json=[other_enrollment])
+        )
+        resp = client.get("/api/students/SIS-001/audit?course_ids=1,2,3")
+    assert resp.status_code == 200
+    assert route_1.call_count == 1
+    assert route_2.call_count == 1
+    assert route_3.call_count == 1  # every course checked, not short-circuited
+    matches = resp.json()
+    assert len(matches) == 1
+    assert matches[0] == {"course_id": 1, "first_name": "Jane", "last_name": "Doe", "grade": None}
+
+
+def test_audit_matches_ssid_case_insensitively(client):
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/1/enrollments").mock(
+            return_value=Response(200, json=[SAMPLE_ENROLLMENT])
+        )
+        resp = client.get("/api/students/sis-001/audit?course_ids=1")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+def test_audit_no_match_returns_empty_list(client):
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/1/enrollments").mock(
+            return_value=Response(200, json=[SAMPLE_ENROLLMENT])
+        )
+        resp = client.get("/api/students/NOBODY/audit?course_ids=1")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_audit_propagates_canvas_error(client):
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/1/enrollments").mock(
+            return_value=Response(200, json=[SAMPLE_ENROLLMENT])
+        )
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/2/enrollments").mock(
+            return_value=Response(403, json={"status": "unauthorized"})
+        )
+        resp = client.get("/api/students/SIS-001/audit?course_ids=1,2")
+    assert resp.status_code == 502
+
+
+def test_audit_caps_concurrent_course_checks(client):
+    state = {"current": 0, "peak": 0}
+    course_count = _MAX_CONCURRENT_COURSE_CHECKS * 3
+
+    async def slow_empty_roster(request):
+        state["current"] += 1
+        state["peak"] = max(state["peak"], state["current"])
+        await asyncio.sleep(0.03)
+        state["current"] -= 1
+        return Response(200, json=[])
+
+    with respx.mock:
+        for course_id in range(1, course_count + 1):
+            respx.get(f"{CANVAS_BASE}/api/v1/courses/{course_id}/enrollments").mock(
+                side_effect=slow_empty_roster
+            )
+        course_ids = ",".join(str(i) for i in range(1, course_count + 1))
+        resp = client.get(f"/api/students/SIS-001/audit?course_ids={course_ids}")
+
+    assert resp.status_code == 200
+    assert state["peak"] <= _MAX_CONCURRENT_COURSE_CHECKS
+    assert state["peak"] > 1  # actually ran concurrently, not serialized

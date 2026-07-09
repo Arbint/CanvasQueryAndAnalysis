@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 import anyio
 import respx
 from httpx import Response
@@ -78,6 +80,44 @@ def test_get_course_students_requests_total_scores():
     assert route.called
     query = route.calls.last.request.url.params
     assert query.get_list("include[]") == ["user", "total_scores"]
+
+
+def test_get_retries_on_429_then_succeeds():
+    with respx.mock:
+        route = respx.get(f"{BASE}/api/v1/accounts").mock(
+            side_effect=[
+                Response(429, headers={"Retry-After": "0"}),
+                Response(200, json=[{"id": 1, "name": "Root"}]),
+            ]
+        )
+        with patch("app.services.canvas_client.asyncio.sleep", new=AsyncMock()):
+            result = anyio.run(make_client().get_accounts)
+    assert route.call_count == 2
+    assert result == [{"id": 1, "name": "Root"}]
+
+
+def test_get_gives_up_after_max_retries():
+    with respx.mock:
+        route = respx.get(f"{BASE}/api/v1/accounts").mock(
+            return_value=Response(429, headers={"Retry-After": "0"})
+        )
+        with patch("app.services.canvas_client.asyncio.sleep", new=AsyncMock()):
+            try:
+                anyio.run(make_client().get_accounts)
+                assert False, "Expected CanvasAPIError"
+            except CanvasAPIError as e:
+                assert e.status_code == 429
+    assert route.call_count == CanvasClient._MAX_RETRIES + 1
+
+
+def test_get_backs_off_exponentially_without_retry_after_header():
+    with respx.mock:
+        respx.get(f"{BASE}/api/v1/accounts").mock(
+            side_effect=[Response(429), Response(200, json=[])]
+        )
+        with patch("app.services.canvas_client.asyncio.sleep", new=AsyncMock()) as sleep_mock:
+            anyio.run(make_client().get_accounts)
+    sleep_mock.assert_awaited_once_with(CanvasClient._BASE_BACKOFF_SECONDS)
 
 
 def test_canvas_api_error_on_4xx():

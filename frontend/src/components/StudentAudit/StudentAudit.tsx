@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { api } from '../../api/client'
-import type { Course } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
 import './StudentAudit.css'
 
@@ -11,11 +10,6 @@ interface AuditRow {
   instructor: string
   term_name: string
   grade: string | null
-}
-
-interface AuditMatch {
-  row: AuditRow
-  studentName: string
 }
 
 type SortKey = 'name' | 'course_code' | 'instructor' | 'term_name' | 'grade'
@@ -34,23 +28,6 @@ function sortRows(rows: AuditRow[], key: SortKey, dir: SortDir): AuditRow[] {
     const cmp = String(a[key] ?? '').localeCompare(String(b[key] ?? ''))
     return dir === 'asc' ? cmp : -cmp
   })
-}
-
-async function findEnrollment(course: Course, studentId: string): Promise<AuditMatch | null> {
-  const roster = await api.getStudents(course.id)
-  const match = roster.find((s) => s.ssid.trim().toLowerCase() === studentId.toLowerCase())
-  if (!match) return null
-  return {
-    studentName: `${match.first_name} ${match.last_name}`.trim(),
-    row: {
-      course_id: course.id,
-      name: course.name,
-      course_code: course.course_code,
-      instructor: course.instructor,
-      term_name: course.term_name,
-      grade: match.grade ?? null,
-    },
-  }
 }
 
 export function StudentAudit() {
@@ -86,13 +63,25 @@ export function StudentAudit() {
     setStudentName(null)
     setLoading(true)
     try {
-      // Checks the roster of each course already in the course list — the same
-      // call the course list and student list already use — instead of a single
-      // cross-course lookup, which needs Canvas permissions this app doesn't ask for.
-      const results = await Promise.all(courses.map((c) => findEnrollment(c, id)))
-      const matches = results.filter((r): r is AuditMatch => r !== null)
-      setRows(matches.map((m) => m.row))
-      setStudentName(matches.length > 0 ? matches[0].studentName : null)
+      // A single request — the backend fans out one roster check per course
+      // concurrently, so this never runs into the browser's per-origin
+      // connection cap the way N separate requests would.
+      const matches = await api.getStudentAudit(id, courses.map((c) => c.id))
+      const courseById = new Map(courses.map((c) => [c.id, c]))
+      const newRows: AuditRow[] = matches.flatMap((m) => {
+        const course = courseById.get(m.course_id)
+        if (!course) return []
+        return [{
+          course_id: course.id,
+          name: course.name,
+          course_code: course.course_code,
+          instructor: course.instructor,
+          term_name: course.term_name,
+          grade: m.grade,
+        }]
+      })
+      setRows(newRows)
+      setStudentName(matches.length > 0 ? `${matches[0].first_name} ${matches[0].last_name}`.trim() : null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Audit failed')
       setRows([])

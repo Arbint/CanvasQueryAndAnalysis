@@ -16,3 +16,10 @@ class Student(BaseModel):
     @property
     def email(self) -> str:
         return f"{self.login_id}@student.uiwtx.edu"
+
+
+class AuditMatch(BaseModel):
+    course_id: int
+    first_name: str
+    last_name: str
+    grade: str | None = None

@@ -111,3 +111,26 @@ def list_students(course_id: int) -> list[dict]:
             "grade": enrollment.get("grade", _grades[(student["id"] + course_id) % len(_grades)]),
         })
     return result
+
+
+@app.get("/api/students/{student_id}/audit")
+def audit_student(student_id: str, course_ids: str = Query()) -> list[dict]:
+    parsed_course_ids = {int(c) for c in course_ids.split(",") if c.strip()}
+    if not parsed_course_ids:
+        raise HTTPException(status_code=400, detail="course_ids is required")
+
+    target = student_id.strip().lower()
+    result = []
+    for enrollment in db["enrollments"]:
+        if enrollment["course_id"] not in parsed_course_ids:
+            continue
+        student = _student_map.get(enrollment["student_id"])
+        if not student or student["ssid"].strip().lower() != target:
+            continue
+        result.append({
+            "course_id": enrollment["course_id"],
+            "first_name": student["first_name"],
+            "last_name": student["last_name"],
+            "grade": enrollment.get("grade", _grades[(student["id"] + enrollment["course_id"]) % len(_grades)]),
+        })
+    return result

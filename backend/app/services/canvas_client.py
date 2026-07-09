@@ -12,6 +12,9 @@ class CanvasAPIError(Exception):
 
 
 class CanvasClient:
+    _MAX_RETRIES = 4
+    _BASE_BACKOFF_SECONDS = 1.0
+
     def __init__(self, base_url: str, token: str) -> None:
         self._base_url = base_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {token}"}
@@ -34,6 +37,22 @@ class CanvasClient:
         if self._client is not None:
             await self._client.aclose()
 
+    async def _get(self, url: str, params: dict | None = None) -> httpx.Response:
+        # Canvas enforces a per-token request-cost budget and returns 429 once
+        # it's exhausted — a burst of concurrent calls (e.g. Student Audit
+        # checking many courses at once) can trip it even with a concurrency
+        # cap in front of it. Retry with backoff instead of failing outright.
+        client = self._http()
+        response = await client.get(url, params=params)
+        for attempt in range(self._MAX_RETRIES):
+            if response.status_code != 429:
+                break
+            retry_after = response.headers.get("Retry-After")
+            delay = float(retry_after) if retry_after else self._BASE_BACKOFF_SECONDS * (2**attempt)
+            await asyncio.sleep(delay)
+            response = await client.get(url, params=params)
+        return response
+
     @staticmethod
     def _raise_for_error(response: httpx.Response) -> None:
         if response.status_code >= 400:
@@ -47,10 +66,9 @@ class CanvasClient:
         results: list[dict] = []
         next_url: str | None = url
         next_params: dict | None = params
-        client = self._http()
 
         while next_url:
-            response = await client.get(next_url, params=next_params)
+            response = await self._get(next_url, next_params)
             self._raise_for_error(response)
             results.extend(response.json())
             next_url = self._extract_next_link(response)
@@ -82,10 +100,9 @@ class CanvasClient:
         terms: list[dict] = []
         next_url: str | None = f"{self._base_url}/api/v1/accounts/self/terms"
         next_params: dict | None = {"per_page": 100}
-        client = self._http()
 
         while next_url:
-            response = await client.get(next_url, params=next_params)
+            response = await self._get(next_url, next_params)
             self._raise_for_error(response)
             data = response.json()
             terms.extend(data.get("enrollment_terms", []))
@@ -128,9 +145,9 @@ class CanvasClient:
     async def get_course_student_count(self, course_id: int) -> int:
         # Single request using Canvas's total_students include — far faster than
         # paginating all enrollments.
-        response = await self._http().get(
+        response = await self._get(
             f"{self._base_url}/api/v1/courses/{course_id}",
-            params={"include[]": "total_students"},
+            {"include[]": "total_students"},
         )
         self._raise_for_error(response)
         return response.json().get("total_students", 0)
