@@ -26,7 +26,7 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
   const selected = courses.find((c) => c.id === value)
   const filtered = courses.filter((c) => {
     const q = query.toLowerCase()
-    return c.name.toLowerCase().includes(q) || c.term_name.toLowerCase().includes(q)
+    return c.name.toLowerCase().includes(q) || c.term_name.toLowerCase().includes(q) || c.instructor.toLowerCase().includes(q)
   })
 
   useEffect(() => {
@@ -54,6 +54,7 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
           {selected ? (
             <>
               <span className="course-select__label-name">{selected.name}</span>
+              <span className="course-select__label-instructor">{selected.instructor}</span>
               <span className="course-select__label-term">{selected.term_name}</span>
             </>
           ) : 'Select course…'}
@@ -88,6 +89,7 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
                     onClick={() => { onChange(c.id); setOpen(false) }}
                   >
                     <span className="course-select__option-name">{c.name}</span>
+                    <span className="course-select__option-instructor">{c.instructor}</span>
                     <span className="course-select__option-term">{c.term_name}</span>
                   </button>
                 </li>

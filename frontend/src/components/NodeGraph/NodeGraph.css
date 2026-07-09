@@ -85,6 +85,14 @@
   white-space: nowrap;
 }
 
+.course-select__label-instructor {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .course-select__label-term {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
@@ -247,12 +255,19 @@
   display: block;
 }
 
+.course-select__option-instructor {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
 .course-select__option-term {
   display: block;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
 
+.course-select__option--selected .course-select__option-instructor,
 .course-select__option--selected .course-select__option-term {
   color: var(--color-accent-blue);
   opacity: 0.8;
