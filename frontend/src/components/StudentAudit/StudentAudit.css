@@ -30,8 +30,12 @@
   letter-spacing: 0.05em;
 }
 
-.student-audit__field input {
+.student-audit__field > input {
   min-width: 220px;
+}
+
+.student-audit__field .chip-input {
+  min-width: 260px;
 }
 
 .student-audit__error {
@@ -104,6 +108,41 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Collapsible section headers (shared) */
+
+.student-audit__collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.student-audit__collapsible-header:hover .student-audit__section-title {
+  color: var(--color-accent-cyan);
+}
+
+.student-audit__collapse-icon {
+  width: 12px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* All Audited Courses table */
+
+.student-audit__all-courses {
+  margin-top: var(--space-2);
+}
+
+.student-audit__all-courses-results {
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: var(--space-2);
+}
+
 /* Semesters section */
 
 .student-audit__semesters {
@@ -111,6 +150,10 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+.student-audit__semesters--collapsed {
+  flex: 0 0 auto;
 }
 
 .student-audit__semesters-header {

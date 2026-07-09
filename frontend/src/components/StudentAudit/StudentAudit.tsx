@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import type { Course, Term } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
+import { ChipInput } from '../CourseSearch/ChipInput'
 import { SearchableSelect } from './SearchableSelect'
 import './StudentAudit.css'
 
@@ -192,6 +193,11 @@ export function StudentAudit() {
   const [baseError, setBaseError] = useState<string | null>(null)
   const [semesters, setSemesters] = useState<SemesterAudit[]>([makeSemesterAudit()])
   const [terms, setTerms] = useState<Term[]>([])
+  const [keywords, setKeywords] = useState<string[]>([])
+  const [allCoursesExpanded, setAllCoursesExpanded] = useState(true)
+  const [semestersExpanded, setSemestersExpanded] = useState(true)
+  const [allSortKey, setAllSortKey] = useState<SortKey>('term_name')
+  const [allSortDir, setAllSortDir] = useState<SortDir>('asc')
 
   useEffect(() => {
     if (!selectedAccountId) { setTerms([]); return }
@@ -212,6 +218,17 @@ export function StudentAudit() {
     }
     return [...byTerm.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [allRows])
+
+  const sortedAllRows = useMemo(() => sortRows(allRows, allSortKey, allSortDir), [allRows, allSortKey, allSortDir])
+
+  const handleAllHeaderClick = (key: SortKey) => {
+    if (key === allSortKey) {
+      setAllSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setAllSortKey(key)
+      setAllSortDir('asc')
+    }
+  }
 
   const anyLoading = semesters.some((s) => s.loading)
 
@@ -238,6 +255,7 @@ export function StudentAudit() {
       const semesterCourses = await api.getCourses({
         account_id: selectedAccountId,
         term_ids: [semester.termId],
+        keywords,
       })
       if (semesterCourses.length === 0) {
         setSemesters((curr) =>
@@ -292,6 +310,10 @@ export function StudentAudit() {
             placeholder="e.g. DEMO00001"
           />
         </div>
+        <div className="student-audit__field">
+          <span className="student-audit__label">Course Filter Keywords (ie. ANGD)</span>
+          <ChipInput values={keywords} onChange={setKeywords} placeholder="Search keyword…" />
+        </div>
         {studentName && <div className="student-audit__student-name">{studentName}</div>}
       </div>
       {baseError && <div className="student-audit__error">{baseError}</div>}
@@ -323,31 +345,82 @@ export function StudentAudit() {
             )}
           </tbody>
         </table>
+
+        <div className="student-audit__all-courses">
+          <button
+            className="student-audit__collapsible-header"
+            onClick={() => setAllCoursesExpanded((v) => !v)}
+          >
+            <span className="student-audit__collapse-icon">{allCoursesExpanded ? '▾' : '▸'}</span>
+            <span className="student-audit__section-title">All Audited Courses</span>
+          </button>
+          {allCoursesExpanded && (
+            <div className="student-audit__all-courses-results">
+              {allRows.length === 0 ? (
+                <div className="student-audit__state">No audited courses yet.</div>
+              ) : (
+                <table className="student-audit__table">
+                  <thead>
+                    <tr>
+                      {COLUMNS.map(({ label, key }) => (
+                        <th key={key} onClick={() => handleAllHeaderClick(key)}>
+                          {label}
+                          <span className="student-audit__sort-icon">
+                            {allSortKey === key ? (allSortDir === 'asc' ? ' ▲' : ' ▼') : ' ⇅'}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedAllRows.map((row, i) => (
+                      <tr key={`${row.course_id}-${i}`}>
+                        <td>{row.name}</td>
+                        <td>{row.course_code}</td>
+                        <td>{row.instructor}</td>
+                        <td>{row.term_name}</td>
+                        <td>{row.grade ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="student-audit__semesters">
+      <div className={`student-audit__semesters${semestersExpanded ? '' : ' student-audit__semesters--collapsed'}`}>
         <div className="student-audit__semesters-header">
-          <span className="student-audit__section-title">Semesters</span>
+          <button
+            className="student-audit__collapsible-header"
+            onClick={() => setSemestersExpanded((v) => !v)}
+          >
+            <span className="student-audit__collapse-icon">{semestersExpanded ? '▾' : '▸'}</span>
+            <span className="student-audit__section-title">Semesters</span>
+          </button>
           <button className="btn btn--secondary" onClick={() => void runAuditAll()} disabled={anyLoading}>
             Audit All
           </button>
         </div>
-        <div className="student-audit__semester-list">
-          {semesters.map((semester) => (
-            <SemesterCard
-              key={semester.id}
-              semester={semester}
-              terms={terms}
-              onTermChange={(termId) => setSemesterTerm(semester.id, termId)}
-              onAudit={() => void runAudit(semester.id)}
-              onRemove={() => removeSemester(semester.id)}
-              removable={semesters.length > 1}
-            />
-          ))}
-          <button className="student-audit__add-semester" onClick={addSemester} title="Add semester">
-            +
-          </button>
-        </div>
+        {semestersExpanded && (
+          <div className="student-audit__semester-list">
+            {semesters.map((semester) => (
+              <SemesterCard
+                key={semester.id}
+                semester={semester}
+                terms={terms}
+                onTermChange={(termId) => setSemesterTerm(semester.id, termId)}
+                onAudit={() => void runAudit(semester.id)}
+                onRemove={() => removeSemester(semester.id)}
+                removable={semesters.length > 1}
+              />
+            ))}
+            <button className="student-audit__add-semester" onClick={addSemester} title="Add semester">
+              +
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
