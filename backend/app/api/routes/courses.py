@@ -3,20 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.dependencies import get_canvas_client
 from app.models.course import Course
 from app.services.canvas_client import CanvasAPIError, CanvasClient
+from app.services.canvas_format import extract_instructor, extract_term_name
 
 router = APIRouter()
-
-
-def _extract_instructor(raw_course: dict) -> str:
-    teachers = raw_course.get("teachers", [])
-    if teachers:
-        return teachers[0].get("display_name", "Unknown")
-    return "Unknown"
-
-
-def _extract_term_name(raw_course: dict) -> str:
-    term = raw_course.get("term", {})
-    return term.get("name", "Unknown") if term else "Unknown"
 
 
 @router.get("/courses", response_model=list[Course])
@@ -43,8 +32,8 @@ async def list_courses(
             id=c["id"],
             name=c["name"],
             course_code=c.get("course_code", ""),
-            instructor=_extract_instructor(c),
-            term_name=_extract_term_name(c),
+            instructor=extract_instructor(c),
+            term_name=extract_term_name(c),
         )
         for c in raw
     ]

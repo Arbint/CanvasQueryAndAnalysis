@@ -15,6 +15,15 @@ class CanvasClient:
         self._base_url = base_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {token}"}
 
+    @staticmethod
+    def _raise_for_error(response: httpx.Response) -> None:
+        if response.status_code >= 400:
+            raise CanvasAPIError(
+                response.status_code,
+                f"Canvas API error {response.status_code} for "
+                f"{response.request.method} {response.request.url}: {response.text}",
+            )
+
     async def _paginate(self, url: str, params: dict | None = None) -> list[dict]:
         results: list[dict] = []
         next_url: str | None = url
@@ -23,11 +32,7 @@ class CanvasClient:
         async with httpx.AsyncClient(headers=self._headers) as client:
             while next_url:
                 response = await client.get(next_url, params=next_params)
-                if response.status_code >= 400:
-                    raise CanvasAPIError(
-                        response.status_code,
-                        f"Canvas API error {response.status_code}: {response.text}",
-                    )
+                self._raise_for_error(response)
                 results.extend(response.json())
                 next_url = self._extract_next_link(response)
                 next_params = None  # params are already encoded in next_url
@@ -62,11 +67,7 @@ class CanvasClient:
         async with httpx.AsyncClient(headers=self._headers) as client:
             while next_url:
                 response = await client.get(next_url, params=next_params)
-                if response.status_code >= 400:
-                    raise CanvasAPIError(
-                        response.status_code,
-                        f"Canvas API error {response.status_code}: {response.text}",
-                    )
+                self._raise_for_error(response)
                 data = response.json()
                 terms.extend(data.get("enrollment_terms", []))
                 next_url = self._extract_next_link(response)
@@ -113,11 +114,7 @@ class CanvasClient:
                 f"{self._base_url}/api/v1/courses/{course_id}",
                 params={"include[]": "total_students"},
             )
-        if response.status_code >= 400:
-            raise CanvasAPIError(
-                response.status_code,
-                f"Canvas API error {response.status_code}: {response.text}",
-            )
+        self._raise_for_error(response)
         return response.json().get("total_students", 0)
 
     async def get_course_students(self, course_id: int) -> list[dict]:

@@ -1,0 +1,1 @@
+Remove start and end semester search and the use course list checkbox, let's just always use the course list in the CourseSearchComponent.
