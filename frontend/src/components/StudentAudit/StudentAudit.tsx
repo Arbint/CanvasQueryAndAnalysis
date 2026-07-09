@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
-import type { Course } from '../../api/types'
+import type { Course, Term } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
 import { SearchableSelect } from './SearchableSelect'
 import './StudentAudit.css'
@@ -186,13 +186,24 @@ function SemesterCard({
 
 export function StudentAudit() {
   const courses = useAppStore((s) => s.courses)
+  const selectedAccountId = useAppStore((s) => s.selectedAccountId)
 
   const [studentId, setStudentId] = useState('')
   const [studentName, setStudentName] = useState<string | null>(null)
   const [baseError, setBaseError] = useState<string | null>(null)
   const [semesters, setSemesters] = useState<SemesterAudit[]>([makeSemesterAudit()])
+  const [terms, setTerms] = useState<Term[]>([])
 
-  const availableTerms = useMemo(() => [...new Set(courses.map((c) => c.term_name))].sort(), [courses])
+  useEffect(() => {
+    if (!selectedAccountId) { setTerms([]); return }
+    api.getTerms(selectedAccountId).then(setTerms).catch(() => setTerms([]))
+  }, [selectedAccountId])
+
+  // Every semester Canvas knows about for the account, not just the ones
+  // currently loaded into the course list — the course list only limits which
+  // of those semesters can actually be audited (see the "no courses for this
+  // semester" error below), not which ones can be searched for.
+  const availableTerms = useMemo(() => terms.map((t) => t.name), [terms])
 
   const allRows = useMemo(() => semesters.flatMap((s) => s.rows), [semesters])
 
