@@ -1,9 +1,19 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import accounts, courses, students
+from app.dependencies import get_canvas_client
 
-app = FastAPI(title="Canvas Query and Analysis")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await get_canvas_client().aclose()
+
+
+app = FastAPI(title="Canvas Query and Analysis", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

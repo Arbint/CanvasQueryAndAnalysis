@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import httpx
@@ -14,6 +15,24 @@ class CanvasClient:
     def __init__(self, base_url: str, token: str) -> None:
         self._base_url = base_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {token}"}
+        self._client: httpx.AsyncClient | None = None
+        self._client_loop: asyncio.AbstractEventLoop | None = None
+
+    def _http(self) -> httpx.AsyncClient:
+        # One pooled client reused across calls, so requests to Canvas — including
+        # every course in a Student Audit — share connections instead of paying a
+        # fresh TCP+TLS handshake each time. Recreated if the running event loop
+        # has changed (httpx clients can't be reused across loops; this only
+        # happens across separate test runs, never in a running server).
+        loop = asyncio.get_running_loop()
+        if self._client is None or self._client_loop is not loop:
+            self._client = httpx.AsyncClient(headers=self._headers)
+            self._client_loop = loop
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
 
     @staticmethod
     def _raise_for_error(response: httpx.Response) -> None:
@@ -28,14 +47,14 @@ class CanvasClient:
         results: list[dict] = []
         next_url: str | None = url
         next_params: dict | None = params
+        client = self._http()
 
-        async with httpx.AsyncClient(headers=self._headers) as client:
-            while next_url:
-                response = await client.get(next_url, params=next_params)
-                self._raise_for_error(response)
-                results.extend(response.json())
-                next_url = self._extract_next_link(response)
-                next_params = None  # params are already encoded in next_url
+        while next_url:
+            response = await client.get(next_url, params=next_params)
+            self._raise_for_error(response)
+            results.extend(response.json())
+            next_url = self._extract_next_link(response)
+            next_params = None  # params are already encoded in next_url
 
         return results
 
@@ -63,15 +82,15 @@ class CanvasClient:
         terms: list[dict] = []
         next_url: str | None = f"{self._base_url}/api/v1/accounts/self/terms"
         next_params: dict | None = {"per_page": 100}
+        client = self._http()
 
-        async with httpx.AsyncClient(headers=self._headers) as client:
-            while next_url:
-                response = await client.get(next_url, params=next_params)
-                self._raise_for_error(response)
-                data = response.json()
-                terms.extend(data.get("enrollment_terms", []))
-                next_url = self._extract_next_link(response)
-                next_params = None
+        while next_url:
+            response = await client.get(next_url, params=next_params)
+            self._raise_for_error(response)
+            data = response.json()
+            terms.extend(data.get("enrollment_terms", []))
+            next_url = self._extract_next_link(response)
+            next_params = None
 
         return terms
 
@@ -109,11 +128,10 @@ class CanvasClient:
     async def get_course_student_count(self, course_id: int) -> int:
         # Single request using Canvas's total_students include — far faster than
         # paginating all enrollments.
-        async with httpx.AsyncClient(headers=self._headers) as client:
-            response = await client.get(
-                f"{self._base_url}/api/v1/courses/{course_id}",
-                params={"include[]": "total_students"},
-            )
+        response = await self._http().get(
+            f"{self._base_url}/api/v1/courses/{course_id}",
+            params={"include[]": "total_students"},
+        )
         self._raise_for_error(response)
         return response.json().get("total_students", 0)
 
