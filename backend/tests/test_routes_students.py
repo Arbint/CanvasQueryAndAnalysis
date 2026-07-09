@@ -35,6 +35,40 @@ def test_list_students(client):
     assert student["ssid"] == "SIS-001"
     assert student["email"] == "jdoe22@student.uiwtx.edu"
     assert student["enrollment_state"] == "active"
+    assert student["grade"] is None
+
+
+def test_list_students_grade_prefers_final_score(client):
+    enrollment = {**SAMPLE_ENROLLMENT, "grades": {"final_score": 87.5, "current_score": 60}}
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/5/enrollments").mock(
+            return_value=Response(200, json=[enrollment])
+        )
+        resp = client.get("/api/courses/5/students")
+    assert resp.json()[0]["grade"] == "87.5%"
+
+
+def test_list_students_grade_falls_back_to_current_score(client):
+    enrollment = {**SAMPLE_ENROLLMENT, "grades": {"current_score": 90}}
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/5/enrollments").mock(
+            return_value=Response(200, json=[enrollment])
+        )
+        resp = client.get("/api/courses/5/students")
+    assert resp.json()[0]["grade"] == "90%"
+
+
+def test_list_students_grade_omitted_when_unauthorized(client):
+    # Canvas omits the "grades" key entirely rather than erroring when the
+    # caller lacks grade-view permission for the course.
+    enrollment = {**SAMPLE_ENROLLMENT}
+    enrollment.pop("grades", None)
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/5/enrollments").mock(
+            return_value=Response(200, json=[enrollment])
+        )
+        resp = client.get("/api/courses/5/students")
+    assert resp.json()[0]["grade"] is None
 
 
 def test_list_students_empty(client):

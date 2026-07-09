@@ -13,6 +13,11 @@ interface AuditRow {
   grade: string | null
 }
 
+interface AuditMatch {
+  row: AuditRow
+  studentName: string
+}
+
 type SortKey = 'name' | 'course_code' | 'instructor' | 'term_name' | 'grade'
 type SortDir = 'asc' | 'desc'
 
@@ -31,17 +36,20 @@ function sortRows(rows: AuditRow[], key: SortKey, dir: SortDir): AuditRow[] {
   })
 }
 
-async function findEnrollment(course: Course, studentId: string): Promise<AuditRow | null> {
+async function findEnrollment(course: Course, studentId: string): Promise<AuditMatch | null> {
   const roster = await api.getStudents(course.id)
   const match = roster.find((s) => s.ssid.trim().toLowerCase() === studentId.toLowerCase())
   if (!match) return null
   return {
-    course_id: course.id,
-    name: course.name,
-    course_code: course.course_code,
-    instructor: course.instructor,
-    term_name: course.term_name,
-    grade: match.grade ?? null,
+    studentName: `${match.first_name} ${match.last_name}`.trim(),
+    row: {
+      course_id: course.id,
+      name: course.name,
+      course_code: course.course_code,
+      instructor: course.instructor,
+      term_name: course.term_name,
+      grade: match.grade ?? null,
+    },
   }
 }
 
@@ -52,6 +60,7 @@ export function StudentAudit() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<AuditRow[]>([])
+  const [studentName, setStudentName] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('term_name')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -74,16 +83,20 @@ export function StudentAudit() {
 
     setError(null)
     setHasSearched(true)
+    setStudentName(null)
     setLoading(true)
     try {
       // Checks the roster of each course already in the course list — the same
       // call the course list and student list already use — instead of a single
       // cross-course lookup, which needs Canvas permissions this app doesn't ask for.
       const results = await Promise.all(courses.map((c) => findEnrollment(c, id)))
-      setRows(results.filter((r): r is AuditRow => r !== null))
+      const matches = results.filter((r): r is AuditMatch => r !== null)
+      setRows(matches.map((m) => m.row))
+      setStudentName(matches.length > 0 ? matches[0].studentName : null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Audit failed')
       setRows([])
+      setStudentName(null)
     } finally {
       setLoading(false)
     }
@@ -107,6 +120,7 @@ export function StudentAudit() {
       </div>
 
       {error && <div className="student-audit__error">{error}</div>}
+      {studentName && <div className="student-audit__student-name">{studentName}</div>}
 
       <div className="student-audit__results">
         {loading ? (

@@ -118,8 +118,11 @@ class CanvasClient:
         return response.json().get("total_students", 0)
 
     async def get_course_students(self, course_id: int) -> list[dict]:
+        # total_scores adds each enrollment's overall percentage grade. Canvas
+        # silently omits it (rather than rejecting the request) for callers who
+        # lack grade-view permission, so this is safe to always request.
         enrollments = await self._paginate(
             f"{self._base_url}/api/v1/courses/{course_id}/enrollments",
-            {"type[]": "StudentEnrollment", "per_page": 100, "include[]": ["user"]},
+            {"type[]": "StudentEnrollment", "per_page": 100, "include[]": ["user", "total_scores"]},
         )
         return [e for e in enrollments if e.get("type") == "StudentEnrollment"]

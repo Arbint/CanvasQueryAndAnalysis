@@ -10,6 +10,7 @@ class Student(BaseModel):
     ssid: str
     login_id: str
     enrollment_state: Literal["active", "inactive"]
+    grade: str | None = None
 
     @computed_field
     @property

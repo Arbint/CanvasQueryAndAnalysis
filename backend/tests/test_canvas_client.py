@@ -69,6 +69,17 @@ def test_get_course_students_filters_enrollment_type():
     assert all(e["type"] == "StudentEnrollment" for e in result)
 
 
+def test_get_course_students_requests_total_scores():
+    with respx.mock:
+        route = respx.get(f"{BASE}/api/v1/courses/5/enrollments").mock(
+            return_value=Response(200, json=[])
+        )
+        anyio.run(lambda: make_client().get_course_students(course_id=5))
+    assert route.called
+    query = route.calls.last.request.url.params
+    assert query.get_list("include[]") == ["user", "total_scores"]
+
+
 def test_canvas_api_error_on_4xx():
     with respx.mock:
         respx.get(f"{BASE}/api/v1/accounts").mock(

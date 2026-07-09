@@ -39,6 +39,16 @@ describe('StudentList', () => {
     expect(screen.getByText('aadams@student.uiwtx.edu')).toBeInTheDocument()
   })
 
+  it('shows the grade when present', () => {
+    renderWithStudents([s({ id: 1, grade: '87.5%' })])
+    expect(screen.getByText('87.5%')).toBeInTheDocument()
+  })
+
+  it('shows an em dash when grade is unavailable', () => {
+    renderWithStudents([s({ id: 1, grade: null })])
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
   it('filters to active students', async () => {
     const user = userEvent.setup()
     renderWithStudents([ALICE, BOB])

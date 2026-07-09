@@ -7,6 +7,19 @@ from app.services.canvas_client import CanvasAPIError, CanvasClient
 router = APIRouter()
 
 
+def _parse_grade(enrollment: dict) -> str | None:
+    # Letter grades require a permission this app doesn't have (see feedback15);
+    # the overall percentage total is visible under a lighter permission and
+    # Canvas omits it gracefully rather than failing when even that's missing.
+    grades = enrollment.get("grades") or {}
+    score = grades.get("final_score")
+    if score is None:
+        score = grades.get("current_score")
+    if score is None:
+        return None
+    return f"{score:g}%"
+
+
 def _parse_student(enrollment: dict) -> Student:
     user = enrollment.get("user", {})
     sortable_name = user.get("sortable_name", ", ")
@@ -25,6 +38,7 @@ def _parse_student(enrollment: dict) -> Student:
         ssid=user.get("sis_user_id") or "",
         login_id=user.get("login_id") or "",
         enrollment_state=state,
+        grade=_parse_grade(enrollment),
     )
 
 

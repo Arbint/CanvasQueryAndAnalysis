@@ -86,6 +86,7 @@ export function StudentList() {
                 <th>SSID</th>
                 <th>Login ID</th>
                 <th>Email</th>
+                <th>Grade</th>
               </tr>
             </thead>
             <tbody>
@@ -96,6 +97,7 @@ export function StudentList() {
                   <td>{s.ssid}</td>
                   <td>{s.login_id}</td>
                   <td>{s.email}</td>
+                  <td>{s.grade ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

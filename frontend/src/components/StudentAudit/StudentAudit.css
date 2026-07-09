@@ -40,6 +40,14 @@
   flex-shrink: 0;
 }
 
+.student-audit__student-name {
+  padding: var(--space-3) var(--space-4) 0;
+  color: var(--color-text-heading);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 .student-audit__results {
   flex: 1;
   overflow-y: auto;

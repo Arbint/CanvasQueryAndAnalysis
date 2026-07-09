@@ -26,7 +26,7 @@ export interface Student {
   login_id: string
   enrollment_state: 'active' | 'inactive'
   email: string
-  grade?: string
+  grade?: string | null
 }
 
 export interface CourseQuery {
