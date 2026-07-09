@@ -16,7 +16,7 @@ interface AuditRow {
 
 interface SemesterAudit {
   id: string
-  termName: string
+  termId: number | null
   rows: AuditRow[]
   hasAudited: boolean
   loading: boolean
@@ -40,7 +40,7 @@ const nextSemesterId = () => `semester-${++semesterCounter}`
 function makeSemesterAudit(): SemesterAudit {
   return {
     id: nextSemesterId(),
-    termName: '',
+    termId: null,
     rows: [],
     hasAudited: false,
     loading: false,
@@ -90,15 +90,15 @@ async function auditSemester(studentId: string, semesterCourses: Course[]): Prom
 
 function SemesterCard({
   semester,
-  availableTerms,
+  terms,
   onTermChange,
   onAudit,
   onRemove,
   removable,
 }: {
   semester: SemesterAudit
-  availableTerms: string[]
-  onTermChange: (termName: string) => void
+  terms: Term[]
+  onTermChange: (termId: number) => void
   onAudit: () => void
   onRemove: () => void
   removable: boolean
@@ -117,14 +117,14 @@ function SemesterCard({
     }
   }
 
-  const termOptions = useMemo(() => availableTerms.map((t) => ({ value: t, label: t })), [availableTerms])
+  const termOptions = useMemo(() => terms.map((t) => ({ value: String(t.id), label: t.name })), [terms])
 
   return (
     <div className="student-audit__semester-card">
       <div className="student-audit__semester-header">
         <SearchableSelect
-          value={semester.termName}
-          onChange={onTermChange}
+          value={semester.termId !== null ? String(semester.termId) : ''}
+          onChange={(value) => onTermChange(Number(value))}
           options={termOptions}
           placeholder="Search semester…"
         />
@@ -185,7 +185,6 @@ function SemesterCard({
 }
 
 export function StudentAudit() {
-  const courses = useAppStore((s) => s.courses)
   const selectedAccountId = useAppStore((s) => s.selectedAccountId)
 
   const [studentId, setStudentId] = useState('')
@@ -198,12 +197,6 @@ export function StudentAudit() {
     if (!selectedAccountId) { setTerms([]); return }
     api.getTerms(selectedAccountId).then(setTerms).catch(() => setTerms([]))
   }, [selectedAccountId])
-
-  // Every semester Canvas knows about for the account, not just the ones
-  // currently loaded into the course list — the course list only limits which
-  // of those semesters can actually be audited (see the "no courses for this
-  // semester" error below), not which ones can be searched for.
-  const availableTerms = useMemo(() => terms.map((t) => t.name), [terms])
 
   const allRows = useMemo(() => semesters.flatMap((s) => s.rows), [semesters])
 
@@ -225,24 +218,13 @@ export function StudentAudit() {
   const runAudit = async (semesterId: string) => {
     const id = studentId.trim()
     if (!id) { setBaseError('Enter a Student ID'); return }
+    if (!selectedAccountId) { setBaseError('Select an account first'); return }
 
     const semester = semesters.find((s) => s.id === semesterId)
     if (!semester) return
 
-    if (!semester.termName) {
+    if (!semester.termId) {
       setSemesters((curr) => curr.map((s) => (s.id === semesterId ? { ...s, error: 'Select a semester' } : s)))
-      return
-    }
-
-    const semesterCourses = courses.filter((c) => c.term_name === semester.termName)
-    if (semesterCourses.length === 0) {
-      setSemesters((curr) =>
-        curr.map((s) =>
-          s.id === semesterId
-            ? { ...s, rows: [], hasAudited: true, error: 'No courses for this semester in the course list' }
-            : s,
-        ),
-      )
       return
     }
 
@@ -250,6 +232,20 @@ export function StudentAudit() {
     setSemesters((curr) => curr.map((s) => (s.id === semesterId ? { ...s, loading: true, error: null } : s)))
 
     try {
+      // Resolve the semester's courses straight from Canvas — the same
+      // account+term-scoped search Course Search already uses — rather than
+      // depending on whatever happens to be loaded in the course list.
+      const semesterCourses = await api.getCourses({
+        account_id: selectedAccountId,
+        term_ids: [semester.termId],
+      })
+      if (semesterCourses.length === 0) {
+        setSemesters((curr) =>
+          curr.map((s) => (s.id === semesterId ? { ...s, rows: [], hasAudited: true, loading: false } : s)),
+        )
+        return
+      }
+
       const { rows, studentName: matchedName } = await auditSemester(id, semesterCourses)
       setSemesters((curr) =>
         curr.map((s) => (s.id === semesterId ? { ...s, rows, hasAudited: true, loading: false } : s)),
@@ -269,7 +265,8 @@ export function StudentAudit() {
   const runAuditAll = async () => {
     const id = studentId.trim()
     if (!id) { setBaseError('Enter a Student ID'); return }
-    const configured = semesters.filter((s) => s.termName)
+    if (!selectedAccountId) { setBaseError('Select an account first'); return }
+    const configured = semesters.filter((s) => s.termId)
     if (configured.length === 0) { setBaseError('Configure at least one semester first'); return }
     await Promise.all(configured.map((s) => runAudit(s.id)))
   }
@@ -279,9 +276,9 @@ export function StudentAudit() {
   const removeSemester = (semesterId: string) =>
     setSemesters((curr) => curr.filter((s) => s.id !== semesterId))
 
-  const setSemesterTerm = (semesterId: string, termName: string) =>
+  const setSemesterTerm = (semesterId: string, termId: number) =>
     setSemesters((curr) =>
-      curr.map((s) => (s.id === semesterId ? { ...s, termName, rows: [], hasAudited: false, error: null } : s)),
+      curr.map((s) => (s.id === semesterId ? { ...s, termId, rows: [], hasAudited: false, error: null } : s)),
     )
 
   return (
@@ -340,8 +337,8 @@ export function StudentAudit() {
             <SemesterCard
               key={semester.id}
               semester={semester}
-              availableTerms={availableTerms}
-              onTermChange={(termName) => setSemesterTerm(semester.id, termName)}
+              terms={terms}
+              onTermChange={(termId) => setSemesterTerm(semester.id, termId)}
               onAudit={() => void runAudit(semester.id)}
               onRemove={() => removeSemester(semester.id)}
               removable={semesters.length > 1}
