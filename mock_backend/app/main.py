@@ -20,7 +20,12 @@ _meeting_patterns = [
     "Wed 6:00-8:45 PM",
     "Online async",
 ]
-_grades = ["A", "A-", "B+", "B", "B-", "C+", "C"]
+def _mock_grade(student_id: int, course_id: int) -> str:
+    # Deterministic percent grade (matches the real backend's Total-column
+    # percent format, e.g. "71%") so the same student+course always shows
+    # the same demo grade, and range-based filtering has something to filter.
+    percent = (student_id * 7 + course_id * 13) % 101
+    return f"{percent}%"
 
 app = FastAPI(title="Canvas Query and Analysis — Mock Backend")
 
@@ -108,7 +113,7 @@ def list_students(course_id: int) -> list[dict]:
             "login_id": student["login_id"],
             "enrollment_state": state,
             "email": f"{student['login_id']}@student.uiwtx.edu",
-            "grade": enrollment.get("grade", _grades[(student["id"] + course_id) % len(_grades)]),
+            "grade": enrollment.get("grade", _mock_grade(student["id"], course_id)),
         })
     return result
 
@@ -131,6 +136,6 @@ def audit_student(student_id: str, course_ids: str = Query()) -> list[dict]:
             "course_id": enrollment["course_id"],
             "first_name": student["first_name"],
             "last_name": student["last_name"],
-            "grade": enrollment.get("grade", _grades[(student["id"] + enrollment["course_id"]) % len(_grades)]),
+            "grade": enrollment.get("grade", _mock_grade(student["id"], enrollment["course_id"])),
         })
     return result

@@ -1,0 +1,124 @@
+.grade-report {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg-base);
+}
+
+.grade-report__filter-column {
+  width: 300px;
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4);
+  border-right: 1px solid var(--color-surface-border);
+  background: var(--color-bg-overlay);
+  overflow-y: auto;
+}
+
+.grade-report__section-title {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-heading);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-3);
+}
+
+.grade-report__error {
+  color: var(--color-accent-red);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-2);
+}
+
+.grade-report__grade-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.grade-report__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-surface-border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.grade-report__range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.grade-report__range input {
+  width: 64px;
+}
+
+.grade-report__count {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.grade-report__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.grade-report__state {
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.grade-report__table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.grade-report__table th,
+.grade-report__table td {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-surface-border);
+  text-align: left;
+}
+
+.grade-report__table th {
+  position: sticky;
+  top: 0;
+  background: var(--color-bg-overlay);
+  color: var(--color-text-heading);
+  z-index: 1;
+}
+
+.grade-report__table tr:hover td {
+  background: var(--color-bg-hover);
+}
+
+.grade-report__sticky-col {
+  position: sticky;
+  left: 0;
+  background: var(--color-bg-base);
+  z-index: 1;
+}
+
+.grade-report__table th:first-child,
+.grade-report__table td:first-child {
+  min-width: 160px;
+}
+
+.grade-report__table th.grade-report__sticky-col {
+  background: var(--color-bg-overlay);
+  z-index: 2;
+}
+
+.grade-report__sticky-col--ssid {
+  left: 160px;
+}

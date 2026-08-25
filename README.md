@@ -17,6 +17,7 @@ The app is intentionally stateless and query-only. It does not write to Canvas o
 - Double-click graph nodes to send their output to the Student List panel.
 - Filter, sort, export CSV, and copy email addresses from student lists.
 - Build Trend Analysis views across sequences of courses, with enrollment counts, retained/lost/new student comparisons, CSV exports, and course-column roster review.
+- Generate a Grade Reporter table across a filtered collection of courses, with a percent grade-range filter to surface students inside (or outside) a given range.
 - Run against either a real Canvas API backend or a local mock backend.
 
 ## Quick Start
@@ -179,6 +180,15 @@ Open the `Trend Analysis` tab in the center working area.
 - Scroll over the course-column area to move horizontally through long sequences.
 
 Trend Analysis works best after you have searched for a broad enough set of courses in the Course Search panel.
+
+### 5. Use Grade Reporter
+
+Open the `Grade Reporter` tab in the center working area.
+
+- In the Filter Column, pick terms, an optional department, and Include/Exclude course-number filters — the same filtering as the Course Collection node in the Aggregation Graph.
+- Click `Generate Report` to fetch every matched course's roster.
+- The Grade Column shows one row per student and one column per matched course, with that student's percent grade in each course (or `—` if they aren't enrolled or have no grade yet).
+- Use the grade range filter (defaults to 0%–100%) above the table to show only students who have at least one grade within that range — handy for finding students who are failing or at risk across a set of courses.
 
 ## Project Structure
 

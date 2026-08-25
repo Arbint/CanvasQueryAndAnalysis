@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { GradeReport } from '../GradeReport/GradeReport'
 import { NodeGraph } from '../NodeGraph/NodeGraph'
 import { StudentAudit } from '../StudentAudit/StudentAudit'
 import { TrendAnalysis } from '../TrendAnalysis/TrendAnalysis'
 import './WorkingArea.css'
 
-type WorkTab = 'aggregation' | 'trend' | 'audit'
+type WorkTab = 'aggregation' | 'trend' | 'audit' | 'gradeReport'
 
 export function WorkingArea() {
   const [activeTab, setActiveTab] = useState<WorkTab>('aggregation')
@@ -36,6 +37,14 @@ export function WorkingArea() {
         >
           Student Course Audit
         </button>
+        <button
+          className={`working-area__tab${activeTab === 'gradeReport' ? ' working-area__tab--active' : ''}`}
+          role="tab"
+          aria-selected={activeTab === 'gradeReport'}
+          onClick={() => setActiveTab('gradeReport')}
+        >
+          Grade Reporter
+        </button>
       </div>
       <div className="working-area__content">
         <div className={activeTab === 'aggregation' ? 'working-area__panel working-area__panel--active' : 'working-area__panel'}>
@@ -46,6 +55,9 @@ export function WorkingArea() {
         </div>
         <div className={activeTab === 'audit' ? 'working-area__panel working-area__panel--active' : 'working-area__panel'}>
           <StudentAudit />
+        </div>
+        <div className={activeTab === 'gradeReport' ? 'working-area__panel working-area__panel--active' : 'working-area__panel'}>
+          <GradeReport />
         </div>
       </div>
     </div>
