@@ -1,0 +1,1 @@
+alter the code base to allow lauching the app to be accessable from local host only or LAN. Ater the launch scripts to ask if the user want to launch it and limit access to just the hostmachine or any one on the LAN. 

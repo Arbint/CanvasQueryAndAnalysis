@@ -89,7 +89,10 @@ else
 fi
 
 echo
-echo "Starting servers..."
+echo "Network access:"
+echo "  [1] This computer only (localhost)  [default]"
+echo "  [2] This computer and other devices on the LAN"
+read -p "Choice (1/2): " NET_CHOICE
 echo
 
 find_free_port() {
@@ -123,22 +126,37 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-LAN_IP=$("$PYTHON" -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect(('8.8.8.8',80)); print(s.getsockname()[0]); s.close()" 2>/dev/null || echo "localhost")
+if [ "$NET_CHOICE" = "2" ]; then
+    LAN_IP=$("$PYTHON" -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect(('8.8.8.8',80)); print(s.getsockname()[0]); s.close()" 2>/dev/null || echo "localhost")
+    BACKEND_HOST_ARGS=(--host 0.0.0.0)
+    FRONTEND_HOST_ARGS=(--host)
+    echo "[OK] LAN access enabled ($LAN_IP)"
+else
+    BACKEND_HOST_ARGS=()
+    FRONTEND_HOST_ARGS=()
+    echo "[OK] Localhost-only access"
+fi
 
 # -- Launch backend
-(cd "$BACKEND" && "$VENV_PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT") &
+(cd "$BACKEND" && "$VENV_PYTHON" -m uvicorn app.main:app --reload --port "$BACKEND_PORT" "${BACKEND_HOST_ARGS[@]}") &
 BACKEND_PID=$!
 
 sleep 2
 
 # -- Launch frontend
-(cd "$FRONTEND" && VITE_API_URL="http://$LAN_IP:$BACKEND_PORT" npm run dev -- --host --port "$FRONTEND_PORT") &
+if [ "$NET_CHOICE" = "2" ]; then
+    (cd "$FRONTEND" && VITE_API_URL="http://$LAN_IP:$BACKEND_PORT" npm run dev -- --port "$FRONTEND_PORT" "${FRONTEND_HOST_ARGS[@]}") &
+else
+    (cd "$FRONTEND" && npm run dev -- --port "$FRONTEND_PORT") &
+fi
 FRONTEND_PID=$!
 
 echo "  Backend   >  http://localhost:$BACKEND_PORT"
-echo "             http://$LAN_IP:$BACKEND_PORT  (LAN)"
 echo "  Frontend  >  http://localhost:$FRONTEND_PORT"
-echo "             http://$LAN_IP:$FRONTEND_PORT  (LAN)"
+if [ "$NET_CHOICE" = "2" ]; then
+    echo "             http://$LAN_IP:$BACKEND_PORT  (LAN)"
+    echo "             http://$LAN_IP:$FRONTEND_PORT  (LAN)"
+fi
 echo
 echo "Press Ctrl+C to stop both servers."
 echo

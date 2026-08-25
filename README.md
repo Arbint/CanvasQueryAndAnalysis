@@ -29,6 +29,8 @@ Mock mode is the easiest way to try the app. It does not require Canvas credenti
 launchMock.bat
 ```
 
+The launcher asks whether to allow access from other devices on the LAN, or restrict access to this computer only (the default). Choosing LAN prints the LAN URLs to use from another device.
+
 This starts:
 
 - Mock backend: `http://localhost:8000`
@@ -52,6 +54,8 @@ Then run:
 ```bat
 launch.bat
 ```
+
+The launcher asks whether to allow access from other devices on the LAN, or restrict access to this computer only (the default). Choosing LAN prints the LAN URLs to use from another device.
 
 This starts:
 
