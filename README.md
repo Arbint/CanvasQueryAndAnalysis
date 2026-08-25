@@ -187,8 +187,10 @@ Open the `Grade Reporter` tab in the center working area.
 
 - In the Filter Column, pick terms, an optional department, and Include/Exclude course-number filters — the same filtering as the Course Collection node in the Aggregation Graph.
 - Click `Generate Report` to fetch every matched course's roster.
-- The Grade Column shows one row per student and one column per matched course, with that student's percent grade in each course (or `—` if they aren't enrolled or have no grade yet).
+- The Grade Column shows one row per student — Name, SSID, Email — and one column per matched course, with that student's percent grade in each course (or `—` if they aren't enrolled or have no grade yet). Each course header also shows the instructor's name and email when Canvas exposes it.
+- Click any column header to sort by it, ascending or descending — including sorting a course column by grade.
 - Use the grade range filter (defaults to 0%–100%) above the table to show only students who have at least one grade within that range — handy for finding students who are failing or at risk across a set of courses.
+- Click `Download CSV` to export the table exactly as currently filtered and sorted.
 
 ## Project Structure
 
@@ -229,6 +231,7 @@ Main real-backend endpoints:
 - `GET /api/courses`
 - `GET /api/courses/{course_id}/student-count`
 - `GET /api/courses/{course_id}/students`
+- `GET /api/courses/{course_id}/instructor`
 
 ## Frontend Structure
 

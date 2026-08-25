@@ -8,3 +8,8 @@ class Course(BaseModel):
     instructor: str
     term_name: str
     student_count: int | None = None
+
+
+class Instructor(BaseModel):
+    name: str | None = None
+    email: str | None = None

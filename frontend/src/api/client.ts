@@ -1,4 +1,4 @@
-import type { Account, AuditMatch, Course, CourseQuery, Student, Term } from './types'
+import type { Account, AuditMatch, Course, CourseQuery, Instructor, Student, Term } from './types'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -42,6 +42,10 @@ export const api = {
 
   getStudents(courseId: number): Promise<Student[]> {
     return get(`/api/courses/${courseId}/students`)
+  },
+
+  getCourseInstructor(courseId: number): Promise<Instructor> {
+    return get(`/api/courses/${courseId}/instructor`)
   },
 
   // One request from the browser — the fan-out across courses happens server-side,

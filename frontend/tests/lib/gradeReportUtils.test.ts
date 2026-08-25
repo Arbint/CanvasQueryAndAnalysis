@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Course, Student } from '../../src/api/types'
-import { buildGradeReport, parseGradePercent, rowInRange } from '../../src/components/GradeReport/gradeReportUtils'
+import {
+  buildGradeReport,
+  courseSortKey,
+  gradeReportToCSV,
+  parseGradePercent,
+  rowInRange,
+  sortGradeReportRows,
+} from '../../src/components/GradeReport/gradeReportUtils'
 
 function course(id: number, name: string): Course {
   return { id, name, course_code: `CODE ${id}`, instructor: 'Prof', term_name: 'Fall 2026', student_count: null }
@@ -70,5 +77,53 @@ describe('rowInRange', () => {
   it('treats a missing grade (-) as always out of range', () => {
     const row = { student: student(1, null), cells: [null] }
     expect(rowInRange(row, 0, 100)).toBe(false)
+  })
+})
+
+describe('sortGradeReportRows', () => {
+  const c1 = course(1, 'Course One')
+  const c2 = course(2, 'Course Two')
+  const rows = [
+    { student: { ...student(1, null), last_name: 'Zeta', ssid: 'B', email: 'zeta@x.com' }, cells: ['60%', '90%'] },
+    { student: { ...student(2, null), last_name: 'Alpha', ssid: 'A', email: 'alpha@x.com' }, cells: ['80%', null] },
+  ]
+
+  it('sorts by name ascending and descending', () => {
+    expect(sortGradeReportRows(rows, [c1, c2], 'name', 'asc').map((r) => r.student.last_name)).toEqual(['Alpha', 'Zeta'])
+    expect(sortGradeReportRows(rows, [c1, c2], 'name', 'desc').map((r) => r.student.last_name)).toEqual(['Zeta', 'Alpha'])
+  })
+
+  it('sorts by ssid', () => {
+    expect(sortGradeReportRows(rows, [c1, c2], 'ssid', 'asc').map((r) => r.student.ssid)).toEqual(['A', 'B'])
+  })
+
+  it('sorts by email', () => {
+    expect(sortGradeReportRows(rows, [c1, c2], 'email', 'asc').map((r) => r.student.email)).toEqual(['alpha@x.com', 'zeta@x.com'])
+  })
+
+  it('sorts by a course column\'s grade, treating a missing grade as lowest', () => {
+    const byC1 = sortGradeReportRows(rows, [c1, c2], courseSortKey(c1.id), 'asc')
+    expect(byC1.map((r) => r.student.last_name)).toEqual(['Zeta', 'Alpha']) // 60% < 80%
+
+    const byC2 = sortGradeReportRows(rows, [c1, c2], courseSortKey(c2.id), 'asc')
+    expect(byC2.map((r) => r.student.last_name)).toEqual(['Alpha', 'Zeta']) // null < 90%
+  })
+})
+
+describe('gradeReportToCSV', () => {
+  it('builds a header row and one row per student with course grades', () => {
+    const c1 = course(1, 'Course One')
+    const rows = [{ student: student(1, '90%'), cells: ['90%'] }]
+    const csv = gradeReportToCSV([c1], rows)
+    const lines = csv.split('\n')
+    expect(lines[0]).toBe('"Name","SSID","Email","Course One"')
+    expect(lines[1]).toBe('"Last1, First1","SSID1","user1@student.uiwtx.edu","90%"')
+  })
+
+  it('renders a missing grade as a dash', () => {
+    const c1 = course(1, 'Course One')
+    const rows = [{ student: student(1, null), cells: [null] }]
+    const csv = gradeReportToCSV([c1], rows)
+    expect(csv.split('\n')[1]).toContain('"-"')
   })
 })

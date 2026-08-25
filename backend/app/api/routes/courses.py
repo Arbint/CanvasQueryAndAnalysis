@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.dependencies import get_canvas_client
-from app.models.course import Course
+from app.models.course import Course, Instructor
 from app.services.canvas_client import CanvasAPIError, CanvasClient
 from app.services.canvas_format import extract_instructor, extract_term_name
 
@@ -37,3 +37,17 @@ async def list_courses(
         )
         for c in raw
     ]
+
+
+@router.get("/courses/{course_id}/instructor", response_model=Instructor)
+async def get_course_instructor(course_id: int, canvas: CanvasClient = Depends(get_canvas_client)):
+    try:
+        teacher_enrollment = await canvas.get_course_teacher(course_id)
+    except CanvasAPIError as e:
+        raise HTTPException(status_code=502, detail=e.message)
+
+    if not teacher_enrollment:
+        return Instructor()
+
+    user = teacher_enrollment.get("user", {})
+    return Instructor(name=user.get("name") or user.get("display_name"), email=user.get("email"))

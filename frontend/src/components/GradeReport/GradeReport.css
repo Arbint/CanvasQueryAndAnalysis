@@ -96,6 +96,38 @@
   background: var(--color-bg-overlay);
   color: var(--color-text-heading);
   z-index: 1;
+  user-select: none;
+  cursor: pointer;
+}
+
+.grade-report__table th:hover {
+  color: var(--color-accent-green);
+}
+
+.grade-report__sort-icon {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-disabled);
+}
+
+.grade-report__table th:hover .grade-report__sort-icon {
+  color: var(--color-text-muted);
+}
+
+.grade-report__course-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.grade-report__course-name {
+  white-space: nowrap;
+}
+
+.grade-report__course-instructor {
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 .grade-report__table tr:hover td {

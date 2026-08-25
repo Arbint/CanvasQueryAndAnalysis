@@ -1,20 +1,32 @@
 import { useMemo, useState } from 'react'
 import { api } from '../../api/client'
-import type { Course } from '../../api/types'
+import type { Course, Instructor } from '../../api/types'
 import { courseMatchesFilters, emptyCourseCollectionFilters, type CourseCollectionFilters } from '../../lib/courseCollectionFilter'
 import { useAppStore } from '../../store/appStore'
 import { CourseCollectionFilterPanel } from '../shared/CourseCollectionFilterPanel'
-import { buildGradeReport, rowInRange, type GradeReportData } from './gradeReportUtils'
+import {
+  buildGradeReport,
+  courseSortKey,
+  downloadGradeReportCSV,
+  rowInRange,
+  sortGradeReportRows,
+  type GradeReportData,
+  type SortDir,
+  type SortKey,
+} from './gradeReportUtils'
 import './GradeReport.css'
 
 export function GradeReport() {
   const courses = useAppStore((s) => s.courses)
   const [filters, setFilters] = useState<CourseCollectionFilters>(emptyCourseCollectionFilters())
   const [report, setReport] = useState<GradeReportData | null>(null)
+  const [instructors, setInstructors] = useState<Record<number, Instructor>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rangeMin, setRangeMin] = useState(0)
   const [rangeMax, setRangeMax] = useState(100)
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const matchedCourses = useMemo(
     () => courses.filter((c) => courseMatchesFilters(c, filters)),
@@ -26,10 +38,21 @@ export function GradeReport() {
     setLoading(true)
     setError(null)
     try {
-      const studentsByCourse = await Promise.all(
-        matchedCourses.map(async (course: Course) => ({ course, students: await api.getStudents(course.id) })),
-      )
+      const [studentsByCourse, instructorEntries] = await Promise.all([
+        Promise.all(matchedCourses.map(async (course: Course) => ({ course, students: await api.getStudents(course.id) }))),
+        Promise.all(matchedCourses.map(async (course: Course) => {
+          try {
+            return [course.id, await api.getCourseInstructor(course.id)] as const
+          } catch {
+            // Instructor email can be permission-gated on the Canvas side (same
+            // class of issue as feedback16's grade workaround) — fall back to
+            // the name already on hand rather than failing the whole report.
+            return [course.id, { name: course.instructor, email: null }] as const
+          }
+        })),
+      ])
       setReport(buildGradeReport(matchedCourses, studentsByCourse))
+      setInstructors(Object.fromEntries(instructorEntries))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to generate report')
     } finally {
@@ -41,8 +64,25 @@ export function GradeReport() {
     if (!report) return []
     const min = Math.min(rangeMin, rangeMax)
     const max = Math.max(rangeMin, rangeMax)
-    return report.rows.filter((row) => rowInRange(row, min, max))
-  }, [report, rangeMin, rangeMax])
+    const inRange = report.rows.filter((row) => rowInRange(row, min, max))
+    return sortGradeReportRows(inRange, report.courses, sortKey, sortDir)
+  }, [report, rangeMin, rangeMax, sortKey, sortDir])
+
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sortIcon = (key: SortKey) => (sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ⇅')
+
+  const handleDownload = () => {
+    if (!report) return
+    downloadGradeReportCSV(report.courses, visibleRows)
+  }
 
   return (
     <div className="grade-report">
@@ -82,6 +122,13 @@ export function GradeReport() {
             />
             <span>%</span>
           </div>
+          <button
+            className="btn btn--secondary"
+            onClick={handleDownload}
+            disabled={!report || visibleRows.length === 0}
+          >
+            Download CSV
+          </button>
           {report && (
             <span className="grade-report__count">
               {visibleRows.length} of {report.rows.length} student{report.rows.length !== 1 ? 's' : ''} shown
@@ -102,13 +149,42 @@ export function GradeReport() {
             <table className="grade-report__table">
               <thead>
                 <tr>
-                  <th className="grade-report__sticky-col">Name</th>
-                  <th className="grade-report__sticky-col grade-report__sticky-col--ssid">SSID</th>
-                  {report.courses.map((c) => (
-                    <th key={c.id} title={`${c.course_code} — ${c.term_name}`}>
-                      {c.name}
-                    </th>
-                  ))}
+                  <th className="grade-report__sticky-col" onClick={() => handleSort('name')}>
+                    Name
+                    <span className="grade-report__sort-icon">{sortIcon('name')}</span>
+                  </th>
+                  <th
+                    className="grade-report__sticky-col grade-report__sticky-col--ssid"
+                    onClick={() => handleSort('ssid')}
+                  >
+                    SSID
+                    <span className="grade-report__sort-icon">{sortIcon('ssid')}</span>
+                  </th>
+                  <th onClick={() => handleSort('email')}>
+                    Email
+                    <span className="grade-report__sort-icon">{sortIcon('email')}</span>
+                  </th>
+                  {report.courses.map((c) => {
+                    const instructor = instructors[c.id]
+                    const key = courseSortKey(c.id)
+                    return (
+                      <th key={c.id} title={`${c.course_code} — ${c.term_name}`} onClick={() => handleSort(key)}>
+                        <div className="grade-report__course-header">
+                          <span className="grade-report__course-name">
+                            {c.name}
+                            <span className="grade-report__sort-icon">{sortIcon(key)}</span>
+                          </span>
+                          {instructor && (instructor.name || instructor.email) && (
+                            <span className="grade-report__course-instructor">
+                              {instructor.name ?? ''}
+                              {instructor.name && instructor.email ? ' — ' : ''}
+                              {instructor.email ?? ''}
+                            </span>
+                          )}
+                        </div>
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -116,6 +192,7 @@ export function GradeReport() {
                   <tr key={row.student.id}>
                     <td className="grade-report__sticky-col">{row.student.last_name}, {row.student.first_name}</td>
                     <td className="grade-report__sticky-col grade-report__sticky-col--ssid">{row.student.ssid}</td>
+                    <td>{row.student.email}</td>
                     {row.cells.map((cell, i) => (
                       <td key={i}>{cell ?? '—'}</td>
                     ))}

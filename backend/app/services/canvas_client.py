@@ -152,6 +152,17 @@ class CanvasClient:
         self._raise_for_error(response)
         return response.json().get("total_students", 0)
 
+    async def get_course_teacher(self, course_id: int) -> dict | None:
+        # include[]=email adds the user's primary email address when the caller
+        # has permission to view it; Canvas omits the key (not an error) rather
+        # than rejecting the request when it doesn't, mirroring total_scores above.
+        enrollments = await self._paginate(
+            f"{self._base_url}/api/v1/courses/{course_id}/enrollments",
+            {"type[]": "TeacherEnrollment", "per_page": 100, "include[]": ["user", "email"]},
+        )
+        teachers = [e for e in enrollments if e.get("type") == "TeacherEnrollment"]
+        return teachers[0] if teachers else None
+
     async def get_course_students(self, course_id: int) -> list[dict]:
         # total_scores adds each enrollment's overall percentage grade. Canvas
         # silently omits it (rather than rejecting the request) for callers who

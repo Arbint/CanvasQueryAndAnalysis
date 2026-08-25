@@ -55,3 +55,50 @@ def test_list_courses_canvas_error(client):
         )
         resp = client.get("/api/courses?account_id=1")
     assert resp.status_code == 502
+
+
+SAMPLE_TEACHER_ENROLLMENT = {
+    "type": "TeacherEnrollment",
+    "user": {"id": 7, "name": "Dr. Robert Kim", "email": "rkim@uiwtx.edu"},
+}
+
+
+def test_get_course_instructor(client):
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/5/enrollments").mock(
+            return_value=Response(200, json=[SAMPLE_TEACHER_ENROLLMENT])
+        )
+        resp = client.get("/api/courses/5/instructor")
+    assert resp.status_code == 200
+    assert resp.json() == {"name": "Dr. Robert Kim", "email": "rkim@uiwtx.edu"}
+
+
+def test_get_course_instructor_email_omitted_when_unauthorized(client):
+    # Same graceful-omission behavior as total_scores: Canvas drops the "email"
+    # key from the user object rather than rejecting the request.
+    enrollment = {"type": "TeacherEnrollment", "user": {"id": 7, "name": "Dr. Robert Kim"}}
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/5/enrollments").mock(
+            return_value=Response(200, json=[enrollment])
+        )
+        resp = client.get("/api/courses/5/instructor")
+    assert resp.json() == {"name": "Dr. Robert Kim", "email": None}
+
+
+def test_get_course_instructor_no_teacher(client):
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/5/enrollments").mock(
+            return_value=Response(200, json=[])
+        )
+        resp = client.get("/api/courses/5/instructor")
+    assert resp.status_code == 200
+    assert resp.json() == {"name": None, "email": None}
+
+
+def test_get_course_instructor_canvas_error(client):
+    with respx.mock:
+        respx.get(f"{CANVAS_BASE}/api/v1/courses/5/enrollments").mock(
+            return_value=Response(403, json={})
+        )
+        resp = client.get("/api/courses/5/instructor")
+    assert resp.status_code == 502

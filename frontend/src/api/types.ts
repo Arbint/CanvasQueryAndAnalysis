@@ -41,3 +41,8 @@ export interface AuditMatch {
   last_name: string
   grade: string | null
 }
+
+export interface Instructor {
+  name: string | null
+  email: string | null
+}

@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -11,7 +12,8 @@ db: dict = json.loads(DB_PATH.read_text(encoding="utf-8-sig"))
 # Pre-build lookup tables once at startup
 _student_map: dict[int, dict] = {s["id"]: s for s in db["students"]}
 _term_map: dict[int, str] = {t["id"]: t["name"] for t in db["terms"]}
-_course_ids: set[int] = {c["id"] for c in db["courses"]}
+_course_map: dict[int, dict] = {c["id"]: c for c in db["courses"]}
+_course_ids: set[int] = set(_course_map)
 _meeting_patterns = [
     "Mon/Wed 9:00-10:15 AM",
     "Mon/Wed 10:30-11:45 AM",
@@ -20,6 +22,12 @@ _meeting_patterns = [
     "Wed 6:00-8:45 PM",
     "Online async",
 ]
+def _mock_instructor_email(name: str) -> str:
+    cleaned = re.sub(r"^(prof|dr|mr|ms|mrs)\.?\s+", "", name, flags=re.IGNORECASE).strip()
+    slug = re.sub(r"[^a-z]+", ".", cleaned.lower()).strip(".") or "instructor"
+    return f"{slug}@uiwtx.edu"
+
+
 def _mock_grade(student_id: int, course_id: int) -> str:
     # Deterministic percent grade (matches the real backend's Total-column
     # percent format, e.g. "71%") so the same student+course always shows
@@ -81,6 +89,15 @@ def list_courses(
             "meeting_time": course.get("meeting_time", _meeting_patterns[course["id"] % len(_meeting_patterns)]),
         })
     return results
+
+
+@app.get("/api/courses/{course_id}/instructor")
+def course_instructor(course_id: int) -> dict:
+    course = _course_map.get(course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    name = course.get("instructor") or None
+    return {"name": name, "email": _mock_instructor_email(name) if name else None}
 
 
 @app.get("/api/courses/{course_id}/student-count")
