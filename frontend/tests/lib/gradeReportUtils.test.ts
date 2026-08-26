@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { Course, Student } from '../../src/api/types'
+import type { Course, Instructor, Student } from '../../src/api/types'
 import {
   buildGradeReport,
+  buildGradeReportWorkbook,
+  courseHeaderLabel,
   courseSortKey,
   gradeReportToCSV,
+  isGradeInRange,
   parseGradePercent,
   rowInRange,
   sortGradeReportRows,
@@ -110,11 +113,30 @@ describe('sortGradeReportRows', () => {
   })
 })
 
+describe('courseHeaderLabel', () => {
+  const c1 = course(1, 'Course One')
+
+  it('returns just the course name when there is no instructor info', () => {
+    expect(courseHeaderLabel(c1)).toBe('Course One')
+    expect(courseHeaderLabel(c1, { name: null, email: null })).toBe('Course One')
+  })
+
+  it('appends name and email on a new line when both are present', () => {
+    expect(courseHeaderLabel(c1, { name: 'Dr. Kim', email: 'kim@x.com' }))
+      .toBe('Course One\nDr. Kim — kim@x.com')
+  })
+
+  it('appends whichever of name/email is present', () => {
+    expect(courseHeaderLabel(c1, { name: 'Dr. Kim', email: null })).toBe('Course One\nDr. Kim')
+    expect(courseHeaderLabel(c1, { name: null, email: 'kim@x.com' })).toBe('Course One\nkim@x.com')
+  })
+})
+
 describe('gradeReportToCSV', () => {
   it('builds a header row and one row per student with course grades', () => {
     const c1 = course(1, 'Course One')
     const rows = [{ student: student(1, '90%'), cells: ['90%'] }]
-    const csv = gradeReportToCSV([c1], rows)
+    const csv = gradeReportToCSV([c1], rows, {})
     const lines = csv.split('\n')
     expect(lines[0]).toBe('"Name","SSID","Email","Course One"')
     expect(lines[1]).toBe('"Last1, First1","SSID1","user1@student.uiwtx.edu","90%"')
@@ -123,7 +145,57 @@ describe('gradeReportToCSV', () => {
   it('renders a missing grade as a dash', () => {
     const c1 = course(1, 'Course One')
     const rows = [{ student: student(1, null), cells: [null] }]
-    const csv = gradeReportToCSV([c1], rows)
+    const csv = gradeReportToCSV([c1], rows, {})
     expect(csv.split('\n')[1]).toContain('"-"')
+  })
+
+  it('includes instructor name and email in the course header', () => {
+    const c1 = course(1, 'Course One')
+    const instructors: Record<number, Instructor> = { 1: { name: 'Dr. Kim', email: 'kim@x.com' } }
+    const csv = gradeReportToCSV([c1], [], instructors)
+    // The instructor line is embedded as a literal newline inside the quoted CSV
+    // cell (valid CSV), so the header spans two physical text lines.
+    expect(csv).toBe('"Name","SSID","Email","Course One\nDr. Kim — kim@x.com"')
+  })
+})
+
+describe('buildGradeReportWorkbook', () => {
+  it('writes headers, grades, and highlights in-range cells with the green font color', async () => {
+    const c1 = course(1, 'Course One')
+    const instructors: Record<number, Instructor> = { 1: { name: 'Dr. Kim', email: 'kim@x.com' } }
+    const rows = [
+      { student: student(1, '90%'), cells: ['90%'] },
+      { student: student(2, null), cells: [null] },
+    ]
+    const workbook = await buildGradeReportWorkbook([c1], rows, instructors, 0, 50)
+    const sheet = workbook.worksheets[0]
+
+    expect(sheet.getRow(1).getCell(4).value).toBe('Course One\nDr. Kim — kim@x.com')
+    expect(sheet.getRow(2).getCell(4).value).toBe('90%')
+    // 90% is outside the 0-50 range passed in, so it should not be highlighted.
+    expect(sheet.getRow(2).getCell(4).font).toBeUndefined()
+    // The second student has no grade ("-"), which is always out of range too.
+    expect(sheet.getRow(3).getCell(4).value).toBe('-')
+    expect(sheet.getRow(3).getCell(4).font).toBeUndefined()
+  })
+
+  it('highlights a grade that falls within the given range', async () => {
+    const c1 = course(1, 'Course One')
+    const rows = [{ student: student(1, '40%'), cells: ['40%'] }]
+    const workbook = await buildGradeReportWorkbook([c1], rows, {}, 0, 50)
+    const cell = workbook.worksheets[0].getRow(2).getCell(4)
+    expect(cell.font?.color?.argb).toBe('FF98C379')
+  })
+})
+
+describe('isGradeInRange', () => {
+  it('matches a percent grade within the bounds, inclusive', () => {
+    expect(isGradeInRange('50%', 0, 50)).toBe(true)
+    expect(isGradeInRange('50%', 51, 100)).toBe(false)
+  })
+
+  it('treats a missing or non-percent grade as never in range', () => {
+    expect(isGradeInRange(null, 0, 100)).toBe(false)
+    expect(isGradeInRange('B+', 0, 100)).toBe(false)
   })
 })

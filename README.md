@@ -189,8 +189,8 @@ Open the `Grade Reporter` tab in the center working area.
 - Click `Generate Report` to fetch every matched course's roster.
 - The Grade Column shows one row per student — Name, SSID, Email — and one column per matched course, with that student's percent grade in each course (or `—` if they aren't enrolled or have no grade yet). Each course header also shows the instructor's name and email when Canvas exposes it.
 - Click any column header to sort by it, ascending or descending — including sorting a course column by grade.
-- Use the grade range filter (defaults to 0%–100%) above the table to show only students who have at least one grade within that range — handy for finding students who are failing or at risk across a set of courses.
-- Click `Download CSV` to export the table exactly as currently filtered and sorted.
+- Use the grade range filter (defaults to 0%–100%) above the table to show only students who have at least one grade within that range — handy for finding students who are failing or at risk across a set of courses. Grades that fall in the active range are highlighted in green.
+- Click `Download CSV` or `Download XLSX` to export the table exactly as currently filtered and sorted, including each course's instructor name/email in the header. The XLSX export also color-codes in-range grades in green.
 
 ## Project Structure
 
@@ -260,6 +260,7 @@ The frontend stack is:
 - Zustand
 - React Flow
 - Vitest
+- ExcelJS (Grade Reporter XLSX export, lazy-loaded)
 
 ## Mock Backend
 

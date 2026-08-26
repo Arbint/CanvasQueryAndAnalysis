@@ -154,3 +154,8 @@
 .grade-report__sticky-col--ssid {
   left: 160px;
 }
+
+.grade-report__cell--in-range {
+  color: var(--color-accent-green);
+  font-weight: 600;
+}

@@ -1,4 +1,5 @@
-import type { Course, Student } from '../../api/types'
+import type { Workbook } from 'exceljs'
+import type { Course, Instructor, Student } from '../../api/types'
 
 export interface GradeReportRow {
   student: Student
@@ -41,11 +42,13 @@ export function parseGradePercent(grade: string | null): number | null {
   return match ? Number(match[1]) : null
 }
 
+export function isGradeInRange(cell: string | null, min: number, max: number): boolean {
+  const pct = parseGradePercent(cell)
+  return pct !== null && pct >= min && pct <= max
+}
+
 export function rowInRange(row: GradeReportRow, min: number, max: number): boolean {
-  return row.cells.some((cell) => {
-    const pct = parseGradePercent(cell)
-    return pct !== null && pct >= min && pct <= max
-  })
+  return row.cells.some((cell) => isGradeInRange(cell, min, max))
 }
 
 export const FIXED_SORT_KEYS = ['name', 'ssid', 'email'] as const
@@ -88,12 +91,26 @@ export function sortGradeReportRows(
   return sorted
 }
 
+// The green accent used to highlight in-range grades, matching --color-accent-green in theme.css.
+export const IN_RANGE_ARGB = 'FF98C379'
+
+export function courseHeaderLabel(course: Course, instructor?: Instructor): string {
+  if (!instructor || (!instructor.name && !instructor.email)) return course.name
+  const contact = [instructor.name, instructor.email].filter(Boolean).join(' — ')
+  return `${course.name}\n${contact}`
+}
+
 function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
-export function gradeReportToCSV(courses: Course[], rows: GradeReportRow[]): string {
-  const header = ['Name', 'SSID', 'Email', ...courses.map((c) => c.name)].map(csvCell).join(',')
+export function gradeReportToCSV(
+  courses: Course[],
+  rows: GradeReportRow[],
+  instructors: Record<number, Instructor>,
+): string {
+  const header = ['Name', 'SSID', 'Email', ...courses.map((c) => courseHeaderLabel(c, instructors[c.id]))]
+    .map(csvCell).join(',')
   const lines = rows.map((row) =>
     [
       `${row.student.last_name}, ${row.student.first_name}`,
@@ -105,8 +122,69 @@ export function gradeReportToCSV(courses: Course[], rows: GradeReportRow[]): str
   return [header, ...lines].join('\n')
 }
 
-export function downloadGradeReportCSV(courses: Course[], rows: GradeReportRow[], filename = 'grade-report.csv'): void {
-  const blob = new Blob([gradeReportToCSV(courses, rows)], { type: 'text/csv;charset=utf-8;' })
+export function downloadGradeReportCSV(
+  courses: Course[],
+  rows: GradeReportRow[],
+  instructors: Record<number, Instructor>,
+  filename = 'grade-report.csv',
+): void {
+  const blob = new Blob([gradeReportToCSV(courses, rows, instructors)], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export async function buildGradeReportWorkbook(
+  courses: Course[],
+  rows: GradeReportRow[],
+  instructors: Record<number, Instructor>,
+  min: number,
+  max: number,
+): Promise<Workbook> {
+  const ExcelJS = (await import('exceljs')).default
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Grade Report')
+
+  const headerRow = sheet.addRow(['Name', 'SSID', 'Email', ...courses.map((c) => courseHeaderLabel(c, instructors[c.id]))])
+  headerRow.font = { bold: true }
+  headerRow.alignment = { wrapText: true, vertical: 'top' }
+
+  for (const row of rows) {
+    const values = [
+      `${row.student.last_name}, ${row.student.first_name}`,
+      row.student.ssid,
+      row.student.email,
+      ...row.cells.map((cell) => cell ?? '-'),
+    ]
+    const sheetRow = sheet.addRow(values)
+    row.cells.forEach((cell, i) => {
+      if (isGradeInRange(cell, min, max)) {
+        sheetRow.getCell(4 + i).font = { color: { argb: IN_RANGE_ARGB }, bold: true }
+      }
+    })
+  }
+
+  sheet.columns.forEach((col, i) => {
+    col.width = i < 3 ? 22 : 20
+  })
+
+  return workbook
+}
+
+export async function downloadGradeReportXLSX(
+  courses: Course[],
+  rows: GradeReportRow[],
+  instructors: Record<number, Instructor>,
+  min: number,
+  max: number,
+  filename = 'grade-report.xlsx',
+): Promise<void> {
+  const workbook = await buildGradeReportWorkbook(courses, rows, instructors, min, max)
+  const buffer = await workbook.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

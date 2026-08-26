@@ -8,6 +8,8 @@ import {
   buildGradeReport,
   courseSortKey,
   downloadGradeReportCSV,
+  downloadGradeReportXLSX,
+  isGradeInRange,
   rowInRange,
   sortGradeReportRows,
   type GradeReportData,
@@ -27,6 +29,7 @@ export function GradeReport() {
   const [rangeMax, setRangeMax] = useState(100)
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [xlsxDownloading, setXlsxDownloading] = useState(false)
 
   const matchedCourses = useMemo(
     () => courses.filter((c) => courseMatchesFilters(c, filters)),
@@ -60,13 +63,16 @@ export function GradeReport() {
     }
   }
 
+  const range = useMemo(
+    () => ({ min: Math.min(rangeMin, rangeMax), max: Math.max(rangeMin, rangeMax) }),
+    [rangeMin, rangeMax],
+  )
+
   const visibleRows = useMemo(() => {
     if (!report) return []
-    const min = Math.min(rangeMin, rangeMax)
-    const max = Math.max(rangeMin, rangeMax)
-    const inRange = report.rows.filter((row) => rowInRange(row, min, max))
+    const inRange = report.rows.filter((row) => rowInRange(row, range.min, range.max))
     return sortGradeReportRows(inRange, report.courses, sortKey, sortDir)
-  }, [report, rangeMin, rangeMax, sortKey, sortDir])
+  }, [report, range, sortKey, sortDir])
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -79,9 +85,19 @@ export function GradeReport() {
 
   const sortIcon = (key: SortKey) => (sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ⇅')
 
-  const handleDownload = () => {
+  const handleDownloadCSV = () => {
     if (!report) return
-    downloadGradeReportCSV(report.courses, visibleRows)
+    downloadGradeReportCSV(report.courses, visibleRows, instructors)
+  }
+
+  const handleDownloadXLSX = async () => {
+    if (!report || xlsxDownloading) return
+    setXlsxDownloading(true)
+    try {
+      await downloadGradeReportXLSX(report.courses, visibleRows, instructors, range.min, range.max)
+    } finally {
+      setXlsxDownloading(false)
+    }
   }
 
   return (
@@ -124,10 +140,17 @@ export function GradeReport() {
           </div>
           <button
             className="btn btn--secondary"
-            onClick={handleDownload}
+            onClick={handleDownloadCSV}
             disabled={!report || visibleRows.length === 0}
           >
             Download CSV
+          </button>
+          <button
+            className="btn btn--secondary"
+            onClick={() => void handleDownloadXLSX()}
+            disabled={!report || visibleRows.length === 0 || xlsxDownloading}
+          >
+            {xlsxDownloading ? 'Downloading…' : 'Download XLSX'}
           </button>
           {report && (
             <span className="grade-report__count">
@@ -194,7 +217,9 @@ export function GradeReport() {
                     <td className="grade-report__sticky-col grade-report__sticky-col--ssid">{row.student.ssid}</td>
                     <td>{row.student.email}</td>
                     {row.cells.map((cell, i) => (
-                      <td key={i}>{cell ?? '—'}</td>
+                      <td key={i} className={isGradeInRange(cell, range.min, range.max) ? 'grade-report__cell--in-range' : undefined}>
+                        {cell ?? '—'}
+                      </td>
                     ))}
                   </tr>
                 ))}
