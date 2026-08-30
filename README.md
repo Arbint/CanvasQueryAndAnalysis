@@ -1,5 +1,6 @@
 # Canvas Query and Analysis
 
+```YOU MAY WANT TO RUN npm install in the front end folder if some dependencie is missing due to updates```
 Canvas Query and Analysis is a read-only web app for searching Canvas LMS courses, inspecting student rosters, combining rosters with set operations, and analyzing enrollment trends across course sequences.
 
 The app is intentionally stateless and query-only. It does not write to Canvas or modify Canvas data.
