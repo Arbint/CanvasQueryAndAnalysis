@@ -3,7 +3,18 @@ import { useReactFlow, useStore } from '@xyflow/react'
 import type { Student } from '../../api/types'
 import { evaluateGraph } from './graphEngine'
 
-export function useNodeStudentCount(nodeId: string): number | null {
+export interface NodeStudentCounts {
+  active: number
+  inactive: number
+  total: number
+}
+
+function countStudents(students: Student[]): NodeStudentCounts {
+  const active = students.filter((s) => s.enrollment_state === 'active').length
+  return { active, inactive: students.length - active, total: students.length }
+}
+
+export function useNodeStudentCount(nodeId: string): NodeStudentCounts | null {
   const { getNodes, getEdges } = useReactFlow()
   // Re-run whenever edges are added/removed so operation nodes stay current
   useStore((s) => s.edges.length)
@@ -15,7 +26,7 @@ export function useNodeStudentCount(nodeId: string): number | null {
 
   if (thisNode.type === 'courseNode' || thisNode.type === 'courseCollectionNode') {
     const students = (thisNode.data as Record<string, unknown>).students as Student[] | undefined
-    return students?.length ?? null
+    return students ? countStudents(students) : null
   }
 
   // Operation nodes: only show count when at least one input is connected
@@ -29,11 +40,22 @@ export function useNodeStudentCount(nodeId: string): number | null {
   }
   try {
     const results = evaluateGraph(nodes, edges, courseStudents as never)
-    const count = results[nodeId]?.length
-    return count !== undefined ? count : null
+    const students = results[nodeId]
+    return students ? countStudents(students) : null
   } catch {
     return null
   }
+}
+
+export function NodeCountBadge({ counts }: { counts: NodeStudentCounts | null }) {
+  if (!counts) return null
+  return (
+    <span className="node__count-stack" title={`${counts.active} active / ${counts.inactive} inactive`}>
+      <span className="node__count-row node__count-row--active">A {counts.active}</span>
+      <span className="node__count-row node__count-row--inactive">I {counts.inactive}</span>
+      <span className={`node__count-row node__count-row--total${counts.total < 10 ? ' node__count--low' : ''}`}>T {counts.total}</span>
+    </span>
+  )
 }
 
 export function useNodeExpand(nodeId: string) {

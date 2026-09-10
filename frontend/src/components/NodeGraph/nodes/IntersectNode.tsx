@@ -1,10 +1,10 @@
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useState } from 'react'
-import { NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
+import { NodeCountBadge, NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
 import '../NodeGraph.css'
 
 const MIN_INPUTS = 2
-const FIRST_HANDLE_TOP = 56
+const FIRST_HANDLE_TOP = 68
 const ROW_HEIGHT = 28
 
 export function IntersectNode({ id, data }: NodeProps) {
@@ -33,7 +33,7 @@ export function IntersectNode({ id, data }: NodeProps) {
     <div className="node node--aggregation">
       <div className="node__header">
         <span>Intersect</span>
-        {studentCount !== null && <span className={`node__count${studentCount < 10 ? ' node__count--low' : ''}`}>{studentCount}</span>}
+        <NodeCountBadge counts={studentCount} />
         <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
           {expanded ? '▲' : '▼'}
         </button>

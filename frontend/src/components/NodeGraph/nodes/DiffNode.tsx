@@ -1,9 +1,9 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
+import { NodeCountBadge, NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
 import '../NodeGraph.css'
 
-const HANDLE_A_TOP = 56
-const HANDLE_B_TOP = 84
+const HANDLE_A_TOP = 68
+const HANDLE_B_TOP = 96
 
 export function DiffNode({ id }: NodeProps) {
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
@@ -13,7 +13,7 @@ export function DiffNode({ id }: NodeProps) {
     <div className="node node--aggregation">
       <div className="node__header">
         <span>Diff</span>
-        {studentCount !== null && <span className={`node__count${studentCount < 10 ? ' node__count--low' : ''}`}>{studentCount}</span>}
+        <NodeCountBadge counts={studentCount} />
         <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
           {expanded ? '▲' : '▼'}
         </button>

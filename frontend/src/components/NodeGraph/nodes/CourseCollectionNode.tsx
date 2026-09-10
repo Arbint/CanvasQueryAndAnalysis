@@ -6,7 +6,7 @@ import { courseMatchesFilters, type CourseCollectionFilters } from '../../../lib
 import { union } from '../../../lib/setOperations'
 import { useAppStore } from '../../../store/appStore'
 import { CourseCollectionFilterPanel } from '../../shared/CourseCollectionFilterPanel'
-import { NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
+import { NodeCountBadge, NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
 import '../NodeGraph.css'
 
 export interface CourseCollectionNodeData extends Record<string, unknown> {
@@ -73,7 +73,7 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
     <div className="node node--collection">
       <div className="node__header">
         <span>Course Collection</span>
-        {studentCount !== null && <span className={`node__count${studentCount < 10 ? ' node__count--low' : ''}`}>{studentCount}</span>}
+        <NodeCountBadge counts={studentCount} />
         <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
           {expanded ? '▲' : '▼'}
         </button>

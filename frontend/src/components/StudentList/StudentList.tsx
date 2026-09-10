@@ -87,6 +87,7 @@ export function StudentList() {
                 <th>Login ID</th>
                 <th>Email</th>
                 <th>Grade</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -98,6 +99,11 @@ export function StudentList() {
                   <td>{s.login_id}</td>
                   <td>{s.email}</td>
                   <td>{s.grade ?? '—'}</td>
+                  <td>
+                    <span className={`student-list__status student-list__status--${s.enrollment_state}`}>
+                      {s.enrollment_state === 'active' ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

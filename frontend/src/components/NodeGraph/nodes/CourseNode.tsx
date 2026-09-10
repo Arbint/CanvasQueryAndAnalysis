@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { Course, Student } from '../../../api/types'
 import { useAppStore } from '../../../store/appStore'
-import { NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
+import { NodeCountBadge, NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
 import '../NodeGraph.css'
 
 export interface CourseNodeData extends Record<string, unknown> {
@@ -138,7 +138,7 @@ export function CourseNode({ id, data }: NodeProps) {
     <div className="node node--course">
       <div className="node__header">
         <span>Course</span>
-        {studentCount !== null && <span className={`node__count${studentCount < 10 ? ' node__count--low' : ''}`}>{studentCount}</span>}
+        <NodeCountBadge counts={studentCount} />
         <button className="node__expand-btn nodrag" onClick={toggleExpand} title={expanded ? 'Collapse' : 'Expand'}>
           {expanded ? '▲' : '▼'}
         </button>

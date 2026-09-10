@@ -72,3 +72,16 @@
 .student-list__table tr:hover td {
   background-color: var(--color-bg-hover);
 }
+
+.student-list__status {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.student-list__status--active {
+  color: var(--color-accent-green);
+}
+
+.student-list__status--inactive {
+  color: var(--color-text-muted);
+}
