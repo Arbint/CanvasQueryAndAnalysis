@@ -19,11 +19,20 @@ export function parseCourseNumber(courseCode: string): string {
   return courseCode.match(/\d{4}/)?.[0] ?? courseCode.match(/\d+/)?.[0] ?? ''
 }
 
-export function matchesWildcard(pattern: string, value: string): boolean {
-  const regexStr = [...pattern]
+// Each * stands for exactly one character; everything else is literal.
+function wildcardToRegexSource(pattern: string): string {
+  return [...pattern]
     .map((c) => (c === '*' ? '.' : c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     .join('')
-  return new RegExp(`^${regexStr}$`).test(value)
+}
+
+export function matchesWildcard(pattern: string, value: string): boolean {
+  return new RegExp(`^${wildcardToRegexSource(pattern)}$`).test(value)
+}
+
+/** Case-insensitive "contains" match, with the same * wildcard as matchesWildcard. */
+export function containsWildcard(pattern: string, value: string): boolean {
+  return new RegExp(wildcardToRegexSource(pattern), 'i').test(value)
 }
 
 export function matchesAnyPattern(patterns: string[], value: string): boolean {

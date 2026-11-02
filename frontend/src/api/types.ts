@@ -29,6 +29,31 @@ export interface Student {
   grade?: string | null
 }
 
+export interface GradebookAssignment {
+  id: number
+  name: string
+  group_name: string
+  points_possible: number | null
+}
+
+export interface GradebookCell {
+  score: number | null
+  grade: string | null
+  excused: boolean
+  missing: boolean
+  late: boolean
+}
+
+export interface GradebookStudent extends Student {
+  // Keyed by assignment id (JSON object keys arrive as strings)
+  cells: Record<string, GradebookCell>
+}
+
+export interface Gradebook {
+  assignments: GradebookAssignment[]
+  students: GradebookStudent[]
+}
+
 export interface CourseQuery {
   account_id: number
   term_ids?: number[]

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
-import type { Term } from '../../api/types'
+import type { Course, Term } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
 import { AccountDropdown } from './AccountDropdown'
 import { ChipInput, type Suggestion } from './ChipInput'
@@ -15,6 +15,9 @@ export function CourseSearch() {
     setCourses,
     updateCourseStudentCount,
     setPendingAddCourseId,
+    activeWorkTab,
+    gradeDisplayCourseId,
+    setGradeDisplayCourseId,
     courseSearchSettings,
     setCourseSearchSettings,
     pendingSessionLoad,
@@ -119,6 +122,13 @@ export function CourseSearch() {
     setSelectedAccountId,
   ])
 
+  // Every click selects the course for Course Grade Display; it only adds a graph
+  // node when that tab isn't the one being looked at.
+  const handleCourseClick = (course: Course) => {
+    setGradeDisplayCourseId(course.id)
+    if (activeWorkTab !== 'courseGrades') setPendingAddCourseId(course.id)
+  }
+
   const handleQueryCounts = async () => {
     if (courses.length === 0) return
     setCountLoading(true)
@@ -172,7 +182,14 @@ export function CourseSearch() {
         </div>
       </div>
 
-      <CourseList courses={courses} loading={loading} error={error} onCourseClick={(c) => setPendingAddCourseId(c.id)} />
+      <CourseList
+        courses={courses}
+        loading={loading}
+        error={error}
+        onCourseClick={handleCourseClick}
+        clickHint={activeWorkTab === 'courseGrades' ? 'Click to display grades' : 'Click to add as node'}
+        selectedCourseId={activeWorkTab === 'courseGrades' ? gradeDisplayCourseId : null}
+      />
     </div>
   )
 }

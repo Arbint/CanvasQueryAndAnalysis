@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Course } from '../../api/types'
+import { containsWildcard } from '../../lib/courseCollectionFilter'
 import './CourseList.css'
 
 type SortKey = 'name' | 'course_code' | 'instructor' | 'term_name' | 'student_count'
@@ -10,6 +11,8 @@ interface CourseListProps {
   loading: boolean
   error: string | null
   onCourseClick?: (course: Course) => void
+  clickHint?: string
+  selectedCourseId?: number | null
 }
 
 const COLUMNS: { label: string; key: SortKey }[] = [
@@ -33,11 +36,24 @@ function sortCourses(courses: Course[], key: SortKey, dir: SortDir): Course[] {
   })
 }
 
-export function CourseList({ courses, loading, error, onCourseClick }: CourseListProps) {
+export function CourseList({ courses, loading, error, onCourseClick, clickHint = 'Click to add as node', selectedCourseId = null }: CourseListProps) {
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
-  const sorted = useMemo(() => sortCourses(courses, sortKey, sortDir), [courses, sortKey, sortDir])
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<SortKey, string>>>({})
+
+  // Display-only filter: hides rows without changing the searched course list
+  const visible = useMemo(() => {
+    const active = Object.entries(columnFilters)
+      .map(([key, value]) => [key as SortKey, (value ?? '').trim()] as const)
+      .filter(([, value]) => value !== '')
+    if (active.length === 0) return courses
+    return courses.filter((c) =>
+      active.every(([key, value]) => containsWildcard(value, String(c[key] ?? ''))),
+    )
+  }, [courses, columnFilters])
+
+  const sorted = useMemo(() => sortCourses(visible, sortKey, sortDir), [visible, sortKey, sortDir])
 
   const handleHeaderClick = (key: SortKey) => {
     if (key === sortKey) {
@@ -70,14 +86,36 @@ export function CourseList({ courses, loading, error, onCourseClick }: CourseLis
               </th>
             ))}
           </tr>
+          <tr className="course-list__filter-row">
+            {COLUMNS.map(({ label, key }) => (
+              <th key={key}>
+                <input
+                  className="course-list__filter-input"
+                  type="search"
+                  placeholder="Filter…"
+                  title="Contains this text; * matches any single character (e.g. 3*7*)"
+                  aria-label={`Filter by ${label}`}
+                  value={columnFilters[key] ?? ''}
+                  onChange={(e) => setColumnFilters((f) => ({ ...f, [key]: e.target.value }))}
+                />
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
+          {sorted.length === 0 && (
+            <tr>
+              <td className="course-list__no-match" colSpan={COLUMNS.length}>
+                No courses match the column filters.
+              </td>
+            </tr>
+          )}
           {sorted.map((c) => (
             <tr
               key={c.id}
-              className={`course-list__row${onCourseClick ? ' course-list__row--clickable' : ''}`}
+              className={`course-list__row${onCourseClick ? ' course-list__row--clickable' : ''}${c.id === selectedCourseId ? ' course-list__row--selected' : ''}`}
               onClick={() => onCourseClick?.(c)}
-              title={onCourseClick ? 'Click to add as node' : undefined}
+              title={onCourseClick ? clickHint : undefined}
             >
               <td>{c.name}</td>
               <td>{c.course_code}</td>

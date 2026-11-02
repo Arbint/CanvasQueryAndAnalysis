@@ -27,6 +27,8 @@ export interface TrendColumnSnapshot {
   width: number
 }
 
+export type WorkTab = 'aggregation' | 'trend' | 'audit' | 'gradeReport' | 'courseGrades'
+
 export interface SavedSession {
   version: 1
   savedAt: string
@@ -57,6 +59,12 @@ interface AppStore {
 
   pendingAddCourseId: number | null
   setPendingAddCourseId: (id: number | null) => void
+
+  activeWorkTab: WorkTab
+  setActiveWorkTab: (tab: WorkTab) => void
+
+  gradeDisplayCourseId: number | null
+  setGradeDisplayCourseId: (id: number | null) => void
 
   graphSnapshot: GraphSnapshot
   setGraphSnapshot: (snapshot: GraphSnapshot) => void
@@ -95,6 +103,12 @@ export const useAppStore = create<AppStore>((set) => ({
 
   pendingAddCourseId: null,
   setPendingAddCourseId: (id) => set({ pendingAddCourseId: id }),
+
+  activeWorkTab: 'aggregation',
+  setActiveWorkTab: (tab) => set({ activeWorkTab: tab }),
+
+  gradeDisplayCourseId: null,
+  setGradeDisplayCourseId: (id) => set({ gradeDisplayCourseId: id }),
 
   graphSnapshot: { nodes: [], edges: [] },
   setGraphSnapshot: (snapshot) => set({ graphSnapshot: snapshot }),

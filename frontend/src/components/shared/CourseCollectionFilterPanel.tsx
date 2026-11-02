@@ -162,7 +162,10 @@ export function CourseCollectionFilterPanel({
             matchedCourses.map((c) => (
               <div key={c.id} className="collection-course-item" title={`${c.course_code} — ${c.term_name}`}>
                 <span className="collection-course-name">{c.name}</span>
-                <span className="collection-course-term">{c.term_name}</span>
+                <span className="collection-course-meta">
+                  <span className="collection-course-code">{c.course_code}</span>
+                  <span className="collection-course-term">{c.term_name}</span>
+                </span>
               </div>
             ))
           )}

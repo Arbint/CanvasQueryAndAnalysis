@@ -172,3 +172,20 @@ class CanvasClient:
             {"type[]": "StudentEnrollment", "per_page": 100, "include[]": ["user", "total_scores"]},
         )
         return [e for e in enrollments if e.get("type") == "StudentEnrollment"]
+
+    async def get_course_assignment_groups(self, course_id: int) -> list[dict]:
+        # Groups come back with their assignments nested, so one call gives both
+        # the gradebook column order and each column's group name.
+        return await self._paginate(
+            f"{self._base_url}/api/v1/courses/{course_id}/assignment_groups",
+            {"per_page": 100, "include[]": ["assignments"]},
+        )
+
+    async def get_course_submissions(self, course_id: int) -> list[dict]:
+        # Every student's submission for every assignment, as one flat list.
+        # Unlike total_scores, Canvas rejects this outright (401/403) when the
+        # caller can't view grades for the course.
+        return await self._paginate(
+            f"{self._base_url}/api/v1/courses/{course_id}/students/submissions",
+            {"student_ids[]": "all", "per_page": 100},
+        )

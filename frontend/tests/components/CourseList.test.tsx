@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { CourseList } from '../../src/components/CourseSearch/CourseList'
 import type { Course } from '../../src/api/types'
@@ -45,5 +45,13 @@ describe('CourseList', () => {
   it('shows empty state when no courses', () => {
     render(<CourseList courses={[]} loading={false} error={null} />)
     expect(screen.getByText(/No courses found/)).toBeInTheDocument()
+  })
+
+  it('column filter supports * wildcards', () => {
+    const other = { ...SAMPLE_COURSE, id: 2, name: 'Art 210', course_code: 'ARTS-210' }
+    render(<CourseList courses={[SAMPLE_COURSE, other]} loading={false} error={null} />)
+    fireEvent.change(screen.getByLabelText('Filter by Code'), { target: { value: 'm*th-1' } })
+    expect(screen.getByText('Math 101')).toBeInTheDocument()
+    expect(screen.queryByText('Art 210')).not.toBeInTheDocument()
   })
 })

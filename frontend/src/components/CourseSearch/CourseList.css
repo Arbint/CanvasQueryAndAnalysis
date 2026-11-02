@@ -19,9 +19,13 @@
   font-size: var(--font-size-sm);
 }
 
-.course-list__table th {
+.course-list__table thead {
   position: sticky;
   top: 0;
+  z-index: 1;
+}
+
+.course-list__table th {
   background-color: var(--color-bg-overlay);
   padding: var(--space-2) var(--space-3);
   text-align: left;
@@ -80,4 +84,29 @@
 
 .course-list__row--clickable:active td {
   background-color: var(--color-surface-2);
+}
+
+.course-list__table .course-list__filter-row th {
+  padding: 0 var(--space-2) var(--space-2);
+  cursor: default;
+}
+
+.course-list__filter-input {
+  width: 100%;
+  min-width: 3em;
+  box-sizing: border-box;
+  padding: 2px var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: normal;
+}
+
+.course-list__no-match {
+  padding: var(--space-4) var(--space-3);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.course-list__row--selected td {
+  background-color: var(--color-surface-2);
+  color: var(--color-text-heading);
 }

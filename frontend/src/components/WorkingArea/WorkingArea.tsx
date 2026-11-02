@@ -1,63 +1,56 @@
-import { useState } from 'react'
+import { CourseGrades } from '../CourseGrades/CourseGrades'
 import { GradeReport } from '../GradeReport/GradeReport'
 import { NodeGraph } from '../NodeGraph/NodeGraph'
 import { StudentAudit } from '../StudentAudit/StudentAudit'
 import { TrendAnalysis } from '../TrendAnalysis/TrendAnalysis'
+import { useAppStore, type WorkTab } from '../../store/appStore'
 import './WorkingArea.css'
 
-type WorkTab = 'aggregation' | 'trend' | 'audit' | 'gradeReport'
+const TABS: { key: WorkTab; label: string }[] = [
+  { key: 'aggregation', label: 'Aggregation Graph' },
+  { key: 'trend', label: 'Trend Analysis' },
+  { key: 'audit', label: 'Student Course Audit' },
+  { key: 'gradeReport', label: 'Grade Reporter' },
+  { key: 'courseGrades', label: 'Course Grade Display' },
+]
 
 export function WorkingArea() {
-  const [activeTab, setActiveTab] = useState<WorkTab>('aggregation')
+  const activeTab = useAppStore((s) => s.activeWorkTab)
+  const setActiveTab = useAppStore((s) => s.setActiveWorkTab)
+
+  const panelClass = (tab: WorkTab) =>
+    activeTab === tab ? 'working-area__panel working-area__panel--active' : 'working-area__panel'
 
   return (
     <div className="working-area">
       <div className="working-area__tabs" role="tablist" aria-label="Working area">
-        <button
-          className={`working-area__tab${activeTab === 'aggregation' ? ' working-area__tab--active' : ''}`}
-          role="tab"
-          aria-selected={activeTab === 'aggregation'}
-          onClick={() => setActiveTab('aggregation')}
-        >
-          Aggregation Graph
-        </button>
-        <button
-          className={`working-area__tab${activeTab === 'trend' ? ' working-area__tab--active' : ''}`}
-          role="tab"
-          aria-selected={activeTab === 'trend'}
-          onClick={() => setActiveTab('trend')}
-        >
-          Trend Analysis
-        </button>
-        <button
-          className={`working-area__tab${activeTab === 'audit' ? ' working-area__tab--active' : ''}`}
-          role="tab"
-          aria-selected={activeTab === 'audit'}
-          onClick={() => setActiveTab('audit')}
-        >
-          Student Course Audit
-        </button>
-        <button
-          className={`working-area__tab${activeTab === 'gradeReport' ? ' working-area__tab--active' : ''}`}
-          role="tab"
-          aria-selected={activeTab === 'gradeReport'}
-          onClick={() => setActiveTab('gradeReport')}
-        >
-          Grade Reporter
-        </button>
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            className={`working-area__tab${activeTab === key ? ' working-area__tab--active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === key}
+            onClick={() => setActiveTab(key)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       <div className="working-area__content">
-        <div className={activeTab === 'aggregation' ? 'working-area__panel working-area__panel--active' : 'working-area__panel'}>
+        <div className={panelClass('aggregation')}>
           <NodeGraph />
         </div>
-        <div className={activeTab === 'trend' ? 'working-area__panel working-area__panel--active' : 'working-area__panel'}>
+        <div className={panelClass('trend')}>
           <TrendAnalysis />
         </div>
-        <div className={activeTab === 'audit' ? 'working-area__panel working-area__panel--active' : 'working-area__panel'}>
+        <div className={panelClass('audit')}>
           <StudentAudit />
         </div>
-        <div className={activeTab === 'gradeReport' ? 'working-area__panel working-area__panel--active' : 'working-area__panel'}>
+        <div className={panelClass('gradeReport')}>
           <GradeReport />
+        </div>
+        <div className={panelClass('courseGrades')}>
+          <CourseGrades active={activeTab === 'courseGrades'} />
         </div>
       </div>
     </div>

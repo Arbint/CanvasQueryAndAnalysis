@@ -1,0 +1,1 @@
+The Total grade in the Coruse Grade Display tab seems to be in consistent with the Canvas display online, I think in your total, you are counting all non-graded asignment as 0, while the canvas display just not counting those assignment that hasn't been graded, can you double check and make it consistent with the Total comlumn on canvas?

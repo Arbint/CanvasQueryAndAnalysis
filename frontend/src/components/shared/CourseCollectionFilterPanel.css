@@ -124,7 +124,22 @@
   text-overflow: ellipsis;
 }
 
+.collection-course-meta {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.collection-course-code {
+  font-size: var(--font-size-xs);
+  color: var(--color-accent-cyan);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .collection-course-term {
+  white-space: nowrap;
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }

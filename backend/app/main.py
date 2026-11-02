@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import accounts, courses, students
+from app.api.routes import accounts, courses, gradebook, students
 from app.dependencies import get_canvas_client
 
 
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(accounts.router, prefix="/api")
 app.include_router(courses.router, prefix="/api")
 app.include_router(students.router, prefix="/api")
+app.include_router(gradebook.router, prefix="/api")
 
 
 @app.get("/health")
