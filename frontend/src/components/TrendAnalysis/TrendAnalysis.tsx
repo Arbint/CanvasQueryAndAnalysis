@@ -73,6 +73,14 @@ const compareLabels: Record<CompareKind, string> = {
 let trendColumnCounter = 0
 const nextColumnId = () => `trend-column-${++trendColumnCounter}`
 
+/** Keeps freshly generated column ids from colliding with restored ones. */
+function reserveColumnIds(snapshots: TrendColumnSnapshot[]) {
+  for (const snapshot of snapshots) {
+    const n = Number(snapshot.id.match(/(\d+)$/)?.[1])
+    if (Number.isFinite(n) && n > trendColumnCounter) trendColumnCounter = n
+  }
+}
+
 const makeColumn = (): TrendColumn => ({
   id: nextColumnId(),
   mode: 'course',
@@ -265,41 +273,105 @@ function axisTermLabel(column: TrendColumn, course: Course | null): string {
   return course?.term_name ?? ''
 }
 
+// --- Export data (read by the HTML snapshot download) ---
+
+export interface TrendExportColumn {
+  number: number
+  mode: 'course' | 'collection'
+  label: string
+  term: string
+  instructor: string | null
+  meetingTime: string | null
+  matchedCourseCount: number
+  students: { name: string; grade: string }[]
+  retained: number
+  lost: Student[]
+  added: Student[]
+  hasPrevious: boolean
+}
+
+export interface TrendExportData {
+  svgMarkup: string
+  columns: TrendExportColumn[]
+}
+
+interface TrendAnalysisProps {
+  /** Columns to restore on mount; null starts a fresh analysis. */
+  initialColumns: TrendColumnSnapshot[] | null
+  onColumnsChange: (columns: TrendColumnSnapshot[]) => void
+  /** Called once restoring `initialColumns` has finished loading students. */
+  onRestored?: () => void
+  registerExporter: (exporter: (() => TrendExportData) | null) => void
+}
+
 // --- Main component ---
 
-export function TrendAnalysis() {
+export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, registerExporter }: TrendAnalysisProps) {
   const courses = useAppStore((s) => s.courses)
   const setActiveStudentList = useAppStore((s) => s.setActiveStudentList)
-  const setTrendColumns = useAppStore((s) => s.setTrendColumns)
-  const pendingTrendColumns = useAppStore((s) => s.pendingTrendColumns)
-  const setPendingTrendColumns = useAppStore((s) => s.setPendingTrendColumns)
-  const setLoadStatus = useAppStore((s) => s.setLoadStatus)
-  const [columns, setColumns] = useState<TrendColumn[]>([makeColumn(), makeColumn()])
+  const [columns, setColumns] = useState<TrendColumn[]>(() => {
+    if (!initialColumns || initialColumns.length === 0) return [makeColumn(), makeColumn()]
+    reserveColumnIds(initialColumns)
+    return initialColumns.map((snapshot) => {
+      const column = columnFromSnapshot(snapshot)
+      const needsLoad = column.mode === 'collection' || (column.mode === 'course' && column.courseId)
+      return needsLoad ? { ...column, loading: true } : column
+    })
+  })
   const [zoom, setZoom] = useState(1)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [menu, setMenu] = useState<{ index: number; x: number; y: number } | null>(null)
   // Per-column fetch cache: columnId → courseId → Student[]
   const collectCacheRef = useRef<Record<string, Record<number, Student[]>>>({})
+  // Column strip navigation
+  const stripRef = useRef<HTMLDivElement>(null)
+  const scrollToEndRef = useRef(false)
+  const [stripScroll, setStripScroll] = useState({ position: 0, max: 0 })
+
+  const updateStripScroll = () => {
+    const strip = stripRef.current
+    if (!strip) return
+    const max = Math.max(0, strip.scrollWidth - strip.clientWidth)
+    const position = Math.min(max, strip.scrollLeft)
+    setStripScroll((prev) => (prev.position === position && prev.max === max ? prev : { position, max }))
+  }
 
   useEffect(() => {
-    setTrendColumns(columns.map(columnToSnapshot))
-  }, [columns, setTrendColumns])
+    if (scrollToEndRef.current && stripRef.current) {
+      scrollToEndRef.current = false
+      stripRef.current.scrollTo({ left: stripRef.current.scrollWidth, behavior: 'smooth' })
+    }
+    updateStripScroll()
+  }, [columns])
 
   useEffect(() => {
-    if (!pendingTrendColumns) return
+    const strip = stripRef.current
+    if (!strip) return
+    const observer = new ResizeObserver(() => updateStripScroll())
+    observer.observe(strip)
+    return () => observer.disconnect()
+  }, [])
+
+  const scrollStripTo = (position: number) => {
+    if (stripRef.current) stripRef.current.scrollLeft = position
+  }
+
+  const callbacksRef = useRef({ onColumnsChange, onRestored })
+  callbacksRef.current = { onColumnsChange, onRestored }
+  const svgRef = useRef<SVGSVGElement>(null)
+
+  useEffect(() => {
+    callbacksRef.current.onColumnsChange(columns.map(columnToSnapshot))
+  }, [columns])
+
+  // Restore saved columns once, on mount (ref guard survives StrictMode re-runs).
+  const restoreStartedRef = useRef(false)
+  useEffect(() => {
+    if (restoreStartedRef.current) return
+    restoreStartedRef.current = true
+    if (!initialColumns) return
     const restoreTrend = async () => {
-      setLoadStatus('Populating trend analysis...')
-      const restored = pendingTrendColumns.length > 0
-        ? pendingTrendColumns.map(columnFromSnapshot)
-        : [makeColumn(), makeColumn()]
-      setColumns(restored.map((column) => (
-        column.mode === 'course' && column.courseId
-          ? { ...column, loading: true }
-          : column.mode === 'collection'
-            ? { ...column, loading: true }
-            : column
-      )))
-
+      const restored = initialColumns.map(columnFromSnapshot)
       const loaded = await Promise.all(restored.map(async (column) => {
         if (column.mode === 'course' && column.courseId) {
           try {
@@ -328,12 +400,11 @@ export function TrendAnalysis() {
 
         return column
       }))
-      setColumns(loaded)
-      setPendingTrendColumns(null)
-      setLoadStatus(null)
+      if (loaded.length > 0) setColumns(loaded)
+      callbacksRef.current.onRestored?.()
     }
     void restoreTrend()
-  }, [courses, pendingTrendColumns, setLoadStatus, setPendingTrendColumns])
+  }, [])
 
   const selectedCourses = columns.map((col) => courses.find((c) => c.id === col.courseId) ?? null)
   const comparisons = columns.map((col, i) =>
@@ -438,7 +509,10 @@ export function TrendAnalysis() {
     }
   }
 
-  const addColumn = () => setColumns((curr) => [...curr, makeColumn()])
+  const addColumn = () => {
+    scrollToEndRef.current = true
+    setColumns((curr) => [...curr, makeColumn()])
+  }
 
   const removeColumn = (columnId: string) => {
     setColumns((curr) => curr.filter((col) => col.id !== columnId))
@@ -480,6 +554,44 @@ export function TrendAnalysis() {
     window.addEventListener('pointerup', handleUp)
   }
 
+  // Latest render data for the HTML snapshot export.
+  const exportDataRef = useRef<() => TrendExportData>(() => ({ svgMarkup: '', columns: [] }))
+  exportDataRef.current = () => ({
+    svgMarkup: (() => {
+      // Export at natural (unzoomed) size.
+      const clone = svgRef.current?.cloneNode(true) as SVGSVGElement | undefined
+      if (!clone) return ''
+      clone.setAttribute('width', String(graph.width))
+      clone.setAttribute('height', String(graph.height))
+      return clone.outerHTML
+    })(),
+    columns: columns.map((column, index) => {
+      const course = selectedCourses[index]
+      return {
+        number: index + 1,
+        mode: column.mode,
+        label: column.mode === 'course' ? course?.name ?? 'No course' : axisLabel(column, course),
+        term: axisTermLabel(column, course),
+        instructor: column.mode === 'course' ? course?.instructor ?? null : null,
+        meetingTime: column.mode === 'course' ? course?.meeting_time ?? null : null,
+        matchedCourseCount: column.matchedCourseCount,
+        students: column.students.map((student) => ({
+          name: `${student.first_name} ${student.last_name}`,
+          grade: gradeFor(student, column.courseId),
+        })),
+        retained: comparisons[index].retained.length,
+        lost: comparisons[index].lost,
+        added: comparisons[index].added,
+        hasPrevious: index > 0,
+      }
+    }),
+  })
+
+  useEffect(() => {
+    registerExporter(() => exportDataRef.current())
+    return () => registerExporter(null)
+  }, [registerExporter])
+
   const activeMenu = menu ? comparisons[menu.index] : null
   const hoveredComparison = hoveredIndex === null ? null : comparisons[hoveredIndex]
 
@@ -500,6 +612,7 @@ export function TrendAnalysis() {
         </div>
         <div className="trend-graph__viewport">
           <svg
+            ref={svgRef}
             className="trend-graph__svg"
             width={graph.width * zoom}
             height={graph.height}
@@ -566,7 +679,20 @@ export function TrendAnalysis() {
       </section>
 
       <section className="trend-courses">
-        <div className="trend-courses__strip">
+        <div className="trend-nav">
+          <input
+            type="range"
+            className="trend-nav__slider"
+            aria-label="Scroll columns"
+            min={0}
+            max={stripScroll.max}
+            step={1}
+            value={stripScroll.position}
+            disabled={stripScroll.max === 0}
+            onChange={(e) => scrollStripTo(Number(e.target.value))}
+          />
+        </div>
+        <div className="trend-courses__strip" ref={stripRef} onScroll={updateStripScroll}>
           {columns.map((column, index) => {
             const course = selectedCourses[index]
             return (

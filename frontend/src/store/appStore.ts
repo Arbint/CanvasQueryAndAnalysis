@@ -27,6 +27,12 @@ export interface TrendColumnSnapshot {
   width: number
 }
 
+export interface TrendAnalysisSnapshot {
+  id: string
+  name: string
+  columns: TrendColumnSnapshot[]
+}
+
 export type WorkTab = 'aggregation' | 'trend' | 'audit' | 'gradeReport' | 'courseGrades'
 
 export interface SavedSession {
@@ -39,7 +45,10 @@ export interface SavedSession {
   }
   graph: GraphSnapshot
   trend: {
-    columns: TrendColumnSnapshot[]
+    /** Multiple independent analyses (current format). */
+    analyses?: TrendAnalysisSnapshot[]
+    /** Single analysis (legacy session files). */
+    columns?: TrendColumnSnapshot[]
   }
 }
 
@@ -71,10 +80,10 @@ interface AppStore {
   pendingGraphSnapshot: GraphSnapshot | null
   setPendingGraphSnapshot: (snapshot: GraphSnapshot | null) => void
 
-  trendColumns: TrendColumnSnapshot[]
-  setTrendColumns: (columns: TrendColumnSnapshot[]) => void
-  pendingTrendColumns: TrendColumnSnapshot[] | null
-  setPendingTrendColumns: (columns: TrendColumnSnapshot[] | null) => void
+  trendAnalyses: TrendAnalysisSnapshot[]
+  setTrendAnalyses: (analyses: TrendAnalysisSnapshot[]) => void
+  pendingTrendAnalyses: TrendAnalysisSnapshot[] | null
+  setPendingTrendAnalyses: (analyses: TrendAnalysisSnapshot[] | null) => void
 
   pendingSessionLoad: SavedSession | null
   setPendingSessionLoad: (session: SavedSession | null) => void
@@ -115,10 +124,10 @@ export const useAppStore = create<AppStore>((set) => ({
   pendingGraphSnapshot: null,
   setPendingGraphSnapshot: (snapshot) => set({ pendingGraphSnapshot: snapshot }),
 
-  trendColumns: [],
-  setTrendColumns: (columns) => set({ trendColumns: columns }),
-  pendingTrendColumns: null,
-  setPendingTrendColumns: (columns) => set({ pendingTrendColumns: columns }),
+  trendAnalyses: [],
+  setTrendAnalyses: (analyses) => set({ trendAnalyses: analyses }),
+  pendingTrendAnalyses: null,
+  setPendingTrendAnalyses: (analyses) => set({ pendingTrendAnalyses: analyses }),
 
   pendingSessionLoad: null,
   setPendingSessionLoad: (session) => set({ pendingSessionLoad: session }),

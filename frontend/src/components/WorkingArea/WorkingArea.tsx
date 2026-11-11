@@ -2,7 +2,7 @@ import { CourseGrades } from '../CourseGrades/CourseGrades'
 import { GradeReport } from '../GradeReport/GradeReport'
 import { NodeGraph } from '../NodeGraph/NodeGraph'
 import { StudentAudit } from '../StudentAudit/StudentAudit'
-import { TrendAnalysis } from '../TrendAnalysis/TrendAnalysis'
+import { TrendAnalysisTabs } from '../TrendAnalysis/TrendAnalysisTabs'
 import { useAppStore, type WorkTab } from '../../store/appStore'
 import './WorkingArea.css'
 
@@ -41,7 +41,7 @@ export function WorkingArea() {
           <NodeGraph />
         </div>
         <div className={panelClass('trend')}>
-          <TrendAnalysis />
+          <TrendAnalysisTabs />
         </div>
         <div className={panelClass('audit')}>
           <StudentAudit />

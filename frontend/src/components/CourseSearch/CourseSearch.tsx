@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Course, Term } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
+import { sessionTrendAnalyses } from '../../lib/sessionPersistence'
 import { AccountDropdown } from './AccountDropdown'
 import { ChipInput, type Suggestion } from './ChipInput'
 import { CourseList } from './CourseList'
@@ -23,7 +24,7 @@ export function CourseSearch() {
     pendingSessionLoad,
     setPendingSessionLoad,
     setPendingGraphSnapshot,
-    setPendingTrendColumns,
+    setPendingTrendAnalyses,
     setLoadStatus,
   } = useAppStore()
   const [terms, setTerms] = useState<Term[]>([])
@@ -73,7 +74,8 @@ export function CourseSearch() {
   useEffect(() => {
     if (!pendingSessionLoad) return
     const loadSession = async () => {
-      const { courseSearch, graph, trend } = pendingSessionLoad
+      const { courseSearch, graph } = pendingSessionLoad
+      const trendAnalyses = sessionTrendAnalyses(pendingSessionLoad)
       restoringSessionRef.current = true
       setLoadStatus('Loading search...')
       setError(null)
@@ -84,7 +86,7 @@ export function CourseSearch() {
 
       if (!courseSearch.selectedAccountId) {
         setPendingGraphSnapshot(graph)
-        setPendingTrendColumns(trend.columns)
+        setPendingTrendAnalyses(trendAnalyses)
         setPendingSessionLoad(null)
         setLoadStatus(null)
         restoringSessionRef.current = false
@@ -101,7 +103,7 @@ export function CourseSearch() {
         setCourses(result)
         setLoadStatus('Restoring workspace...')
         setPendingGraphSnapshot(graph)
-        setPendingTrendColumns(trend.columns)
+        setPendingTrendAnalyses(trendAnalyses)
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Load failed')
         setLoadStatus(null)
@@ -118,7 +120,7 @@ export function CourseSearch() {
     setLoadStatus,
     setPendingGraphSnapshot,
     setPendingSessionLoad,
-    setPendingTrendColumns,
+    setPendingTrendAnalyses,
     setSelectedAccountId,
   ])
 

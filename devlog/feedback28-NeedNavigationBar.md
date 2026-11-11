@@ -1,0 +1,1 @@
+for the Trend Analysis, let's add a navigation bar to the row that we use to add course or collections, because when it get's long, it goes beyond the width of the widget, and the user cannot see/configure them any more.

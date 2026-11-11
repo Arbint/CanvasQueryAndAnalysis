@@ -2,6 +2,8 @@
   position: relative;
   display: grid;
   grid-template-rows: minmax(300px, 52%) minmax(0, 1fr);
+  /* minmax(0, …) stops wide content from stretching the grid past the panel */
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
   min-width: 0;
   overflow: hidden;
@@ -124,18 +126,55 @@
 }
 
 .trend-courses {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
+}
+
+.trend-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  height: 28px;
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-surface-border);
+  background: var(--color-bg-overlay);
+}
+
+.trend-nav__slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  accent-color: var(--color-accent-blue);
+  cursor: pointer;
+}
+
+.trend-nav__slider:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .trend-courses__strip {
   display: flex;
   align-items: stretch;
   gap: var(--space-2);
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: var(--space-2);
-  overflow-x: scroll;
+  overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.trend-courses__strip::-webkit-scrollbar {
+  display: none;
 }
 
 .trend-column {
@@ -458,4 +497,136 @@
 .trend-collect-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* --- Analysis sub-tabs --- */
+
+.trend-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: var(--color-bg-base);
+}
+
+.trend-tabs__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--color-surface-border);
+  background: var(--color-bg-elevated);
+}
+
+.trend-tabs__list {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.trend-tabs__tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.trend-tabs__tab:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.trend-tabs__tab--active {
+  color: var(--color-text-heading);
+  background: var(--color-bg-input);
+  border-color: var(--color-accent-cyan);
+}
+
+.trend-tabs__name {
+  max-width: 180px;
+  padding-right: var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trend-tabs__rename {
+  width: 140px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.trend-tabs__close {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.trend-tabs__close:hover {
+  color: var(--color-accent-red);
+  background: var(--color-bg-hover);
+}
+
+.trend-tabs__add {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px dashed var(--color-surface-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-base);
+}
+
+.trend-tabs__add:hover {
+  color: var(--color-accent-blue);
+  border-color: var(--color-accent-blue);
+}
+
+.trend-tabs__download {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-btn-primary-bg);
+  color: var(--color-btn-primary-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.trend-tabs__download:hover {
+  background: var(--color-btn-primary-hover);
+}
+
+.trend-tabs__content {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.trend-tabs__panel {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.trend-tabs__panel--active {
+  display: block;
 }

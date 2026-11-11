@@ -4,7 +4,7 @@ import { ResizableColumns } from './components/layout/ResizableColumns'
 import { CourseSearch } from './components/CourseSearch/CourseSearch'
 import { WorkingArea } from './components/WorkingArea/WorkingArea'
 import { StudentList } from './components/StudentList/StudentList'
-import { cleanGraphSnapshot, cleanTrendColumns, downloadSession, readSessionFile } from './lib/sessionPersistence'
+import { cleanGraphSnapshot, cleanTrendAnalyses, downloadSession, readSessionFile } from './lib/sessionPersistence'
 import { useAppStore } from './store/appStore'
 import './App.css'
 
@@ -15,7 +15,7 @@ export function App() {
     selectedAccountId,
     courseSearchSettings,
     graphSnapshot,
-    trendColumns,
+    trendAnalyses,
     setPendingSessionLoad,
     loadStatus,
     setLoadStatus,
@@ -33,7 +33,7 @@ export function App() {
       },
       graph: cleanGraphSnapshot(graphSnapshot),
       trend: {
-        columns: cleanTrendColumns(trendColumns),
+        analyses: cleanTrendAnalyses(trendAnalyses),
       },
     })
   }

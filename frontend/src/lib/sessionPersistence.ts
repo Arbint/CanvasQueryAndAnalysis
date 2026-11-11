@@ -1,5 +1,5 @@
 import type { Edge, Node } from '@xyflow/react'
-import type { GraphSnapshot, SavedSession, TrendColumnSnapshot } from '../store/appStore'
+import type { GraphSnapshot, SavedSession, TrendAnalysisSnapshot, TrendColumnSnapshot } from '../store/appStore'
 
 function stripRuntimeNodeData(data: Record<string, unknown>) {
   const rest = { ...data }
@@ -52,6 +52,21 @@ export function cleanTrendColumns(columns: TrendColumnSnapshot[]): TrendColumnSn
     matchedCourseCount: column.matchedCourseCount,
     width: column.width,
   }))
+}
+
+export function cleanTrendAnalyses(analyses: TrendAnalysisSnapshot[]): TrendAnalysisSnapshot[] {
+  return analyses.map((analysis) => ({
+    id: analysis.id,
+    name: analysis.name,
+    columns: cleanTrendColumns(analysis.columns),
+  }))
+}
+
+/** Reads trend analyses from a session, accepting the legacy single-analysis format. */
+export function sessionTrendAnalyses(session: SavedSession): TrendAnalysisSnapshot[] {
+  if (session.trend.analyses) return session.trend.analyses
+  if (session.trend.columns) return [{ id: 'trend-analysis-1', name: 'Analysis 1', columns: session.trend.columns }]
+  return []
 }
 
 export function downloadSession(session: SavedSession) {
