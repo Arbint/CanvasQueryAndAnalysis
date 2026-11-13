@@ -1,10 +1,19 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { ResizableColumns } from './components/layout/ResizableColumns'
 import { CourseSearch } from './components/CourseSearch/CourseSearch'
 import { WorkingArea } from './components/WorkingArea/WorkingArea'
 import { StudentList } from './components/StudentList/StudentList'
-import { cleanGraphSnapshot, cleanTrendAnalyses, downloadSession, readSessionFile } from './lib/sessionPersistence'
+import {
+  cleanGraphSnapshot,
+  cleanTrendAnalyses,
+  downloadSession,
+  isEmptySession,
+  readAutosave,
+  readSessionFile,
+  writeAutosave,
+} from './lib/sessionPersistence'
+import type { SavedSession } from './store/appStore'
 import { useAppStore } from './store/appStore'
 import './App.css'
 
@@ -16,27 +25,62 @@ export function App() {
     courseSearchSettings,
     graphSnapshot,
     trendAnalyses,
+    pendingSessionLoad,
     setPendingSessionLoad,
+    pendingGraphSnapshot,
+    pendingTrendAnalyses,
     loadStatus,
     setLoadStatus,
   } = useAppStore()
 
+  const buildSession = (): SavedSession => ({
+    version: 1,
+    savedAt: new Date().toISOString(),
+    courseSearch: {
+      selectedAccountId,
+      selectedTermIds: courseSearchSettings.selectedTermIds,
+      keywords: courseSearchSettings.keywords,
+    },
+    graph: cleanGraphSnapshot(graphSnapshot),
+    trend: {
+      analyses: cleanTrendAnalyses(trendAnalyses),
+    },
+  })
+
   const handleSave = () => {
     setSessionError(null)
-    downloadSession({
-      version: 1,
-      savedAt: new Date().toISOString(),
-      courseSearch: {
-        selectedAccountId,
-        selectedTermIds: courseSearchSettings.selectedTermIds,
-        keywords: courseSearchSettings.keywords,
-      },
-      graph: cleanGraphSnapshot(graphSnapshot),
-      trend: {
-        analyses: cleanTrendAnalyses(trendAnalyses),
-      },
-    })
+    downloadSession(buildSession())
   }
+
+  // On page load, restore the auto-saved session (if any). Auto-saving stays
+  // off until that restore has finished, so the empty startup state can't
+  // overwrite the saved one.
+  const [autosaveReady, setAutosaveReady] = useState(false)
+  const restoreRequestedRef = useRef(false)
+  useEffect(() => {
+    if (restoreRequestedRef.current) return
+    restoreRequestedRef.current = true
+    const saved = readAutosave()
+    if (saved && !isEmptySession(saved)) {
+      setLoadStatus('Restoring previous work...')
+      setPendingSessionLoad(saved)
+    } else {
+      setAutosaveReady(true)
+    }
+  }, [setLoadStatus, setPendingSessionLoad])
+
+  const restoring = Boolean(pendingSessionLoad || pendingGraphSnapshot || pendingTrendAnalyses || loadStatus)
+  useEffect(() => {
+    if (!autosaveReady && restoreRequestedRef.current && !restoring) setAutosaveReady(true)
+  }, [autosaveReady, restoring])
+
+  useEffect(() => {
+    if (!autosaveReady || restoring) return
+    const timer = window.setTimeout(() => writeAutosave(buildSession()), 800)
+    return () => window.clearTimeout(timer)
+    // buildSession reads exactly these values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autosaveReady, restoring, selectedAccountId, courseSearchSettings, graphSnapshot, trendAnalyses])
 
   const handleLoadFile = async (file: File | undefined) => {
     if (!file) return

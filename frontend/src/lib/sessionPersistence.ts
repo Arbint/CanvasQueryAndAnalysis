@@ -43,6 +43,7 @@ export function cleanTrendColumns(columns: TrendColumnSnapshot[]): TrendColumnSn
   return columns.map((column) => ({
     id: column.id,
     mode: column.mode,
+    label: column.label ?? '',
     courseId: column.courseId,
     collection: {
       selectedTerms: [...column.collection.selectedTerms],
@@ -59,6 +60,9 @@ export function cleanTrendAnalyses(analyses: TrendAnalysisSnapshot[]): TrendAnal
     id: analysis.id,
     name: analysis.name,
     columns: cleanTrendColumns(analysis.columns),
+    countFilter: analysis.countFilter ?? 'all',
+    color: analysis.color,
+    inCombined: analysis.inCombined ?? true,
   }))
 }
 
@@ -86,4 +90,41 @@ export async function readSessionFile(file: File): Promise<SavedSession> {
     throw new Error('Unsupported session file')
   }
   return parsed
+}
+
+// --- Auto-save ---
+// The working session is mirrored to this browser's local storage so a page
+// reload (e.g. the browser discarding an idle tab) restores it. Only the
+// session description is stored; student data is re-fetched from Canvas.
+
+const AUTOSAVE_KEY = 'canvas-query.autosave'
+
+export function writeAutosave(session: SavedSession) {
+  try {
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(session))
+  } catch {
+    // Storage unavailable or full: auto-save is best effort.
+  }
+}
+
+export function readAutosave(): SavedSession | null {
+  try {
+    const raw = localStorage.getItem(AUTOSAVE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as SavedSession
+    if (parsed.version !== 1 || !parsed.courseSearch || !parsed.graph || !parsed.trend) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+/** True when a session holds nothing worth restoring. */
+export function isEmptySession(session: SavedSession): boolean {
+  const analyses = sessionTrendAnalyses(session)
+  return (
+    !session.courseSearch.selectedAccountId &&
+    session.graph.nodes.length === 0 &&
+    analyses.every((a) => a.columns.every((c) => !c.courseId && c.mode === 'course'))
+  )
 }

@@ -14,6 +14,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../store/appStore'
+import { uniqueId } from '../../lib/ids'
 import { evaluateGraph } from './graphEngine'
 import { CourseCollectionNode } from './nodes/CourseCollectionNode'
 import { CourseNode, type CourseNodeData } from './nodes/CourseNode'
@@ -35,8 +36,7 @@ const NODE_TYPE_MAP = {
   diffNode: DiffNode,
 }
 
-let nodeIdCounter = 0
-const nextId = () => `node-${++nodeIdCounter}`
+const nextId = () => uniqueId('node')
 
 const COMMENT_BOX_WIDTH = 420
 const COMMENT_BOX_HEIGHT = 260

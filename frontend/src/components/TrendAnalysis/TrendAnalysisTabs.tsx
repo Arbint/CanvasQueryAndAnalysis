@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { downloadTrendSnapshot } from '../../lib/trendExport'
+import { ANALYSIS_COLORS, defaultAnalysisColor, filterByEnrollment, type CombinedSeries } from '../../lib/trendData'
+import { CombinedTrendView } from './CombinedTrendView'
+import { uniqueId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
-import type { TrendColumnSnapshot } from '../../store/appStore'
+import type { TrendColumnSnapshot, TrendCountFilter } from '../../store/appStore'
 import { TrendAnalysis, type TrendExportData } from './TrendAnalysis'
 
 interface AnalysisTab {
@@ -9,10 +12,16 @@ interface AnalysisTab {
   name: string
   /** Columns restored on mount; null starts fresh. */
   initialColumns: TrendColumnSnapshot[] | null
+  initialCountFilter: TrendCountFilter
+  color: string
+  /** Whether the Combined view draws this analysis. */
+  inCombined: boolean
 }
 
-let analysisCounter = 0
-const nextAnalysisId = () => `trend-analysis-${++analysisCounter}`
+/** Id of the always-present Combined tab (never a real analysis). */
+const COMBINED_ID = 'trend-combined'
+
+const nextAnalysisId = () => uniqueId('trend-analysis')
 
 function nextAnalysisName(tabs: AnalysisTab[]) {
   const used = new Set(tabs.map((t) => t.name))
@@ -21,7 +30,20 @@ function nextAnalysisName(tabs: AnalysisTab[]) {
   return `Analysis ${n}`
 }
 
-const makeTab = (name: string): AnalysisTab => ({ id: nextAnalysisId(), name, initialColumns: null })
+const makeTab = (name: string, color: string): AnalysisTab => ({
+  id: nextAnalysisId(),
+  name,
+  initialColumns: null,
+  initialCountFilter: 'all',
+  color,
+  inCombined: true,
+})
+
+/** First palette color no other tab uses, falling back to cycling the palette. */
+function nextAnalysisColor(tabs: AnalysisTab[]): string {
+  const used = new Set(tabs.map((t) => t.color.toLowerCase()))
+  return ANALYSIS_COLORS.find((c) => !used.has(c)) ?? defaultAnalysisColor(tabs.length)
+}
 
 /** Sub-tabs of the Trend Analysis panel; each tab is an independent analysis. */
 export function TrendAnalysisTabs() {
@@ -30,13 +52,18 @@ export function TrendAnalysisTabs() {
   const setPendingTrendAnalyses = useAppStore((s) => s.setPendingTrendAnalyses)
   const setLoadStatus = useAppStore((s) => s.setLoadStatus)
 
-  const [tabs, setTabs] = useState<AnalysisTab[]>(() => [makeTab('Analysis 1')])
+  const [tabs, setTabs] = useState<AnalysisTab[]>(() => [makeTab('Analysis 1', defaultAnalysisColor(0))])
   const [activeId, setActiveId] = useState(() => tabs[0].id)
+  // Bumped when an analysis changes while the Combined view is showing, so it redraws.
+  const [, setCombinedVersion] = useState(0)
+  const activeIdRef = useRef(activeId)
+  activeIdRef.current = activeId
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
   // Live column state reported by each analysis, and its snapshot exporter.
   const columnsRef = useRef<Record<string, TrendColumnSnapshot[]>>({})
+  const countFiltersRef = useRef<Record<string, TrendCountFilter>>({})
   const exportersRef = useRef<Record<string, (() => TrendExportData) | null>>({})
   const pendingRestoresRef = useRef(0)
 
@@ -45,7 +72,14 @@ export function TrendAnalysisTabs() {
 
   const syncStore = useCallback(() => {
     setTrendAnalyses(
-      tabsRef.current.map((t) => ({ id: t.id, name: t.name, columns: columnsRef.current[t.id] ?? [] })),
+      tabsRef.current.map((t) => ({
+        id: t.id,
+        name: t.name,
+        columns: columnsRef.current[t.id] ?? [],
+        countFilter: countFiltersRef.current[t.id] ?? t.initialCountFilter,
+        color: t.color,
+        inCombined: t.inCombined,
+      })),
     )
   }, [setTrendAnalyses])
 
@@ -57,13 +91,21 @@ export function TrendAnalysisTabs() {
   useEffect(() => {
     if (!pendingTrendAnalyses) return
     const restored = pendingTrendAnalyses.length > 0
-      ? pendingTrendAnalyses.map((a) => ({ id: nextAnalysisId(), name: a.name, initialColumns: a.columns }))
-      : [makeTab('Analysis 1')]
+      ? pendingTrendAnalyses.map((a, i) => ({
+          id: nextAnalysisId(),
+          name: a.name,
+          initialColumns: a.columns,
+          initialCountFilter: a.countFilter ?? 'all',
+          color: a.color ?? defaultAnalysisColor(i),
+          inCombined: a.inCombined ?? true,
+        }))
+      : [makeTab('Analysis 1', defaultAnalysisColor(0))]
     columnsRef.current = {}
+    countFiltersRef.current = {}
     exportersRef.current = {}
     pendingRestoresRef.current = restored.filter((t) => t.initialColumns).length
     setTabs(restored)
-    setActiveId(restored[0].id)
+    setActiveId((curr) => (curr === COMBINED_ID ? COMBINED_ID : restored[0].id))
     setRenamingId(null)
     setPendingTrendAnalyses(null)
     if (pendingRestoresRef.current > 0) setLoadStatus('Populating trend analysis...')
@@ -78,6 +120,13 @@ export function TrendAnalysisTabs() {
   const handleColumnsChange = useCallback((id: string, columns: TrendColumnSnapshot[]) => {
     columnsRef.current[id] = columns
     syncStore()
+    if (activeIdRef.current === COMBINED_ID) setCombinedVersion((v) => v + 1)
+  }, [syncStore])
+
+  const handleCountFilterChange = useCallback((id: string, filter: TrendCountFilter) => {
+    countFiltersRef.current[id] = filter
+    syncStore()
+    if (activeIdRef.current === COMBINED_ID) setCombinedVersion((v) => v + 1)
   }, [syncStore])
 
   // Stable per-tab callbacks so child effects don't re-run every render.
@@ -92,7 +141,7 @@ export function TrendAnalysisTabs() {
   }
 
   const addTab = () => {
-    const tab = makeTab(nextAnalysisName(tabs))
+    const tab = makeTab(nextAnalysisName(tabs), nextAnalysisColor(tabs))
     setTabs((curr) => [...curr, tab])
     setActiveId(tab.id)
   }
@@ -102,11 +151,42 @@ export function TrendAnalysisTabs() {
     const index = tabs.findIndex((t) => t.id === id)
     const remaining = tabs.filter((t) => t.id !== id)
     delete columnsRef.current[id]
+    delete countFiltersRef.current[id]
     delete exportersRef.current[id]
     delete exporterSetters.current[id]
     setTabs(remaining)
     if (activeId === id) setActiveId(remaining[Math.max(0, index - 1)].id)
   }
+
+  const setTabColor = (id: string, color: string) => {
+    setTabs((curr) => curr.map((t) => (t.id === id ? { ...t, color } : t)))
+  }
+
+  const toggleInCombined = (id: string) => {
+    setTabs((curr) => curr.map((t) => (t.id === id ? { ...t, inCombined: !t.inCombined } : t)))
+  }
+
+  const exportFor = (tab: AnalysisTab): TrendExportData =>
+    exportersRef.current[tab.id]?.() ?? { countFilter: 'all', columns: [] }
+
+  // Built only while the Combined tab shows; reads each analysis's latest data.
+  const combinedSeries: (CombinedSeries & { included: boolean })[] = activeId === COMBINED_ID
+    ? tabs.map((tab) => {
+        const data = exportFor(tab)
+        return {
+          id: tab.id,
+          name: tab.name,
+          color: tab.color,
+          included: tab.inCombined,
+          columns: data.columns.map((c) => ({
+            axisLabel: c.axisLabel,
+            label: c.label,
+            term: c.axisTerm,
+            count: filterByEnrollment(c.students, data.countFilter).length,
+          })),
+        }
+      })
+    : []
 
   const startRename = (tab: AnalysisTab) => {
     setRenamingId(tab.id)
@@ -124,7 +204,9 @@ export function TrendAnalysisTabs() {
     downloadTrendSnapshot(
       tabs.map((tab) => ({
         name: tab.name,
-        data: exportersRef.current[tab.id]?.() ?? { svgMarkup: '', columns: [] },
+        color: tab.color,
+        inCombined: tab.inCombined,
+        data: exportFor(tab),
       })),
     )
   }
@@ -133,16 +215,37 @@ export function TrendAnalysisTabs() {
     <div className="trend-tabs">
       <div className="trend-tabs__bar" role="tablist" aria-label="Trend analyses">
         <div className="trend-tabs__list">
+          <div
+            className={`trend-tabs__tab trend-tabs__tab--combined${activeId === COMBINED_ID ? ' trend-tabs__tab--active' : ''}`}
+            role="tab"
+            aria-selected={activeId === COMBINED_ID}
+            title="All analyses overlaid on one graph"
+            onClick={() => setActiveId(COMBINED_ID)}
+          >
+            <span className="trend-tabs__name">Combined</span>
+          </div>
+          <span className="trend-tabs__divider" aria-hidden="true" />
           {tabs.map((tab) => (
             <div
               key={tab.id}
               className={`trend-tabs__tab${tab.id === activeId ? ' trend-tabs__tab--active' : ''}`}
+              style={{ ['--tab-color' as string]: tab.color }}
               role="tab"
               aria-selected={tab.id === activeId}
               title="Double-click to rename"
               onClick={() => setActiveId(tab.id)}
               onDoubleClick={() => startRename(tab)}
             >
+              <input
+                type="color"
+                className="trend-tabs__color"
+                title="Tab color"
+                aria-label={`Color for ${tab.name}`}
+                value={tab.color}
+                onChange={(e) => setTabColor(tab.id, e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+              />
               {renamingId === tab.id ? (
                 <input
                   className="trend-tabs__rename"
@@ -182,6 +285,11 @@ export function TrendAnalysisTabs() {
         </button>
       </div>
       <div className="trend-tabs__content">
+        <div className={`trend-tabs__panel${activeId === COMBINED_ID ? ' trend-tabs__panel--active' : ''}`}>
+          {activeId === COMBINED_ID && (
+            <CombinedTrendView series={combinedSeries} onToggle={toggleInCombined} />
+          )}
+        </div>
         {tabs.map((tab) => (
           <div
             key={tab.id}
@@ -190,6 +298,8 @@ export function TrendAnalysisTabs() {
             <TrendAnalysis
               initialColumns={tab.initialColumns}
               onColumnsChange={(columns) => handleColumnsChange(tab.id, columns)}
+              initialCountFilter={tab.initialCountFilter}
+              onCountFilterChange={(filter) => handleCountFilterChange(tab.id, filter)}
               onRestored={tab.initialColumns ? handleRestored : undefined}
               registerExporter={registerExporterFor(tab.id)}
             />

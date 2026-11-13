@@ -1,11 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import type { Course, Term } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
 import { sessionTrendAnalyses } from '../../lib/sessionPersistence'
 import { AccountDropdown } from './AccountDropdown'
-import { ChipInput, type Suggestion } from './ChipInput'
+import { ChipInput, type ChipPresets, type Suggestion } from './ChipInput'
 import { CourseList } from './CourseList'
+import { PresetEditorModal } from './PresetEditorModal'
+import {
+  loadTermPresets,
+  newPresetId,
+  resolvePresetTermIds,
+  saveTermPresets,
+  type TermPreset,
+} from '../../lib/termPresets'
 import './CourseSearch.css'
 
 export function CourseSearch() {
@@ -34,6 +42,17 @@ export function CourseSearch() {
   const [error, setError] = useState<string | null>(null)
   const [countLoading, setCountLoading] = useState(false)
   const restoringSessionRef = useRef(false)
+  const [termPresets, setTermPresets] = useState<TermPreset[]>(loadTermPresets)
+  // null: closed; 'new': creating a preset; otherwise the id of the preset being edited.
+  const [presetEditor, setPresetEditor] = useState<'new' | string | null>(null)
+  const editingPreset = presetEditor && presetEditor !== 'new'
+    ? termPresets.find((p) => p.id === presetEditor) ?? null
+    : null
+
+  const updateTermPresets = (next: TermPreset[]) => {
+    setTermPresets(next)
+    saveTermPresets(next)
+  }
 
   // Fetch terms whenever the account changes
   useEffect(() => {
@@ -52,6 +71,66 @@ export function CourseSearch() {
     label: t.name,
     value: String(t.id),
   }))
+
+  const availableTerms = useMemo(() => terms.map((t) => ({ id: String(t.id), name: t.name })), [terms])
+
+  const semesterPresets: ChipPresets = {
+    items: termPresets.map((preset) => {
+      const usable = resolvePresetTermIds(preset, availableTerms).length
+      const names = preset.terms.map((t) => t.name).join(', ')
+      return {
+        id: preset.id,
+        name: preset.name,
+        detail: usable < preset.terms.length && availableTerms.length > 0
+          ? `${names} (${usable}/${preset.terms.length} in this account)`
+          : names,
+      }
+    }),
+    onApply: (id) => {
+      const preset = termPresets.find((p) => p.id === id)
+      if (preset) setSelectedTermIds(resolvePresetTermIds(preset, availableTerms))
+    },
+    onAddNew: () => setPresetEditor('new'),
+    onEdit: (id) => setPresetEditor(id),
+    onDelete: (id) => {
+      const preset = termPresets.find((p) => p.id === id)
+      if (preset && window.confirm(`Delete preset "${preset.name}"?`)) {
+        updateTermPresets(termPresets.filter((p) => p.id !== id))
+      }
+    },
+  }
+
+  // Terms of the edited preset that the current account doesn't have; kept
+  // selectable in the editor so saving doesn't silently drop them.
+  const missingPresetTerms = editingPreset
+    ? editingPreset.terms.filter((term) => resolvePresetTermIds({ ...editingPreset, terms: [term] }, availableTerms).length === 0)
+    : []
+
+  const editorSuggestions: Suggestion[] = [
+    ...termSuggestions,
+    ...missingPresetTerms.map((t) => ({ label: `${t.name} (not in this account)`, value: t.id })),
+  ]
+
+  const editorInitialValues = editingPreset
+    ? [...resolvePresetTermIds(editingPreset, availableTerms), ...missingPresetTerms.map((t) => t.id)]
+    : selectedTermIds
+
+  const savePreset = (name: string, termIds: string[]) => {
+    const presetTerms = termIds.map((id) => ({
+      id,
+      name: availableTerms.find((t) => t.id === id)?.name
+        ?? missingPresetTerms.find((t) => t.id === id)?.name
+        ?? id,
+    }))
+    if (editingPreset) {
+      updateTermPresets(termPresets.map((p) =>
+        p.id === editingPreset.id ? { ...p, name, terms: presetTerms } : p,
+      ))
+    } else {
+      updateTermPresets([...termPresets, { id: newPresetId(), name, terms: presetTerms }])
+    }
+    setPresetEditor(null)
+  }
 
   const handleSearch = async () => {
     if (!selectedAccountId) return
@@ -106,6 +185,11 @@ export function CourseSearch() {
         setPendingTrendAnalyses(trendAnalyses)
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Load failed')
+        // Still restore the graph and trend tabs (their students load per
+        // course), so a failed course search doesn't lose them — and the
+        // auto-save doesn't then overwrite them with an empty workspace.
+        setPendingGraphSnapshot(graph)
+        setPendingTrendAnalyses(trendAnalyses)
         setLoadStatus(null)
       } finally {
         setLoading(false)
@@ -160,6 +244,7 @@ export function CourseSearch() {
             onChange={setSelectedTermIds}
             suggestions={termSuggestions}
             placeholder="Search semester…"
+            presets={semesterPresets}
           />
         </div>
         <div className="course-search__filter-row">
@@ -183,6 +268,19 @@ export function CourseSearch() {
           </button>
         </div>
       </div>
+
+      {presetEditor && (
+        <PresetEditorModal
+          key={presetEditor}
+          title={editingPreset ? 'Edit semester preset' : 'New semester preset'}
+          initialName={editingPreset?.name ?? ''}
+          initialValues={editorInitialValues}
+          suggestions={editorSuggestions}
+          placeholder="Search semester…"
+          onSave={savePreset}
+          onCancel={() => setPresetEditor(null)}
+        />
+      )}
 
       <CourseList
         courses={courses}

@@ -21,16 +21,27 @@ export interface TrendCollectionFilters {
 export interface TrendColumnSnapshot {
   id: string
   mode: 'course' | 'collection'
+  /** Custom column name; optional for sessions saved before labels existed. */
+  label?: string
   courseId: number | null
   collection: TrendCollectionFilters
   matchedCourseCount: number
   width: number
 }
 
+/** Which students a trend analysis counts, by enrollment state. */
+export type TrendCountFilter = 'all' | 'active' | 'inactive'
+
 export interface TrendAnalysisSnapshot {
   id: string
   name: string
   columns: TrendColumnSnapshot[]
+  /** Optional for sessions saved before the filter existed; defaults to 'all'. */
+  countFilter?: TrendCountFilter
+  /** Tab color code; optional for older sessions (a default is assigned). */
+  color?: string
+  /** Shown in the Combined view; optional for older sessions (defaults to true). */
+  inCombined?: boolean
 }
 
 export type WorkTab = 'aggregation' | 'trend' | 'audit' | 'gradeReport' | 'courseGrades'
@@ -91,7 +102,7 @@ interface AppStore {
   setLoadStatus: (status: string | null) => void
 }
 
-export const useAppStore = create<AppStore>((set) => ({
+export const useAppStore = create<AppStore>()((set) => ({
   selectedAccountId: null,
   setSelectedAccountId: (id) => set({ selectedAccountId: id }),
 
@@ -134,3 +145,18 @@ export const useAppStore = create<AppStore>((set) => ({
   loadStatus: null,
   setLoadStatus: (status) => set({ loadStatus: status }),
 }))
+
+// Dev only: when this file is hot-updated, Vite re-runs it and a brand-new,
+// empty store would replace the old one, wiping courses, graph and trend state
+// (it looks like the page reloaded). Carry the previous store's data over;
+// actions come from the new store so edits to them still take effect.
+if (import.meta.hot?.data) {
+  const previous = import.meta.hot.data.appStore as typeof useAppStore | undefined
+  if (previous) {
+    const data = Object.fromEntries(
+      Object.entries(previous.getState()).filter(([, value]) => typeof value !== 'function'),
+    )
+    useAppStore.setState(data as Partial<AppStore>)
+  }
+  import.meta.hot.data.appStore = useAppStore
+}

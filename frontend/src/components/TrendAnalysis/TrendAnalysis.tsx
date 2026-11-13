@@ -2,8 +2,18 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { api } from '../../api/client'
 import type { Course, Student } from '../../api/types'
 import { union } from '../../lib/setOperations'
+import { uniqueId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
-import type { TrendColumnSnapshot } from '../../store/appStore'
+import type { TrendColumnSnapshot, TrendCountFilter } from '../../store/appStore'
+import {
+  GRAPH_TICKS,
+  compareStudents,
+  countFilterLabels,
+  countFilters,
+  filterByEnrollment,
+  layoutTrendGraph,
+  type Comparison,
+} from '../../lib/trendData'
 import { downloadCSV, emailsString } from '../StudentList/exportUtils'
 import './TrendAnalysis.css'
 
@@ -47,6 +57,8 @@ interface CollectionFilters {
 interface TrendColumn {
   id: string
   mode: 'course' | 'collection'
+  /** User-defined name; empty means use the automatic label. */
+  label: string
   courseId: number | null
   collection: CollectionFilters
   matchedCourseCount: number
@@ -54,12 +66,6 @@ interface TrendColumn {
   error: string | null
   students: Student[]
   width: number
-}
-
-interface Comparison {
-  retained: Student[]
-  lost: Student[]
-  added: Student[]
 }
 
 type CompareKind = keyof Comparison
@@ -70,20 +76,12 @@ const compareLabels: Record<CompareKind, string> = {
   added: 'New',
 }
 
-let trendColumnCounter = 0
-const nextColumnId = () => `trend-column-${++trendColumnCounter}`
-
-/** Keeps freshly generated column ids from colliding with restored ones. */
-function reserveColumnIds(snapshots: TrendColumnSnapshot[]) {
-  for (const snapshot of snapshots) {
-    const n = Number(snapshot.id.match(/(\d+)$/)?.[1])
-    if (Number.isFinite(n) && n > trendColumnCounter) trendColumnCounter = n
-  }
-}
+const nextColumnId = () => uniqueId('trend-column')
 
 const makeColumn = (): TrendColumn => ({
   id: nextColumnId(),
   mode: 'course',
+  label: '',
   courseId: null,
   collection: { selectedTerms: [], department: '', numberPattern: '' },
   matchedCourseCount: 0,
@@ -93,12 +91,17 @@ const makeColumn = (): TrendColumn => ({
   width: 240,
 })
 
+/**
+ * Restored columns get fresh ids: saved ids are not trusted to be unique
+ * (sessions saved while ids could collide may hold duplicates).
+ */
 function columnFromSnapshot(snapshot: TrendColumnSnapshot): TrendColumn {
   return {
-    id: snapshot.id,
+    id: nextColumnId(),
     mode: snapshot.mode,
+    label: snapshot.label ?? '',
     courseId: snapshot.courseId,
-    collection: snapshot.collection,
+    collection: { ...snapshot.collection, selectedTerms: [...snapshot.collection.selectedTerms] },
     matchedCourseCount: snapshot.matchedCourseCount,
     loading: false,
     error: null,
@@ -111,6 +114,7 @@ function columnToSnapshot(column: TrendColumn): TrendColumnSnapshot {
   return {
     id: column.id,
     mode: column.mode,
+    label: column.label,
     courseId: column.courseId,
     collection: column.collection,
     matchedCourseCount: column.matchedCourseCount,
@@ -198,21 +202,6 @@ function CollectionFiltersUI({
 
 // --- Helpers ---
 
-function studentKey(student: Student) {
-  return student.id
-}
-
-function compareStudents(previous: Student[] | null, current: Student[]): Comparison {
-  if (!previous) return { retained: current, lost: [], added: [] }
-  const previousMap = new Map(previous.map((s) => [studentKey(s), s]))
-  const currentMap = new Map(current.map((s) => [studentKey(s), s]))
-  return {
-    retained: current.filter((s) => previousMap.has(studentKey(s))),
-    lost: previous.filter((s) => !currentMap.has(studentKey(s))),
-    added: current.filter((s) => !previousMap.has(studentKey(s))),
-  }
-}
-
 function CourseSelect({
   courses,
   value,
@@ -253,7 +242,12 @@ function safeName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
 
-function axisLabel(column: TrendColumn, course: Course | null): string {
+function truncate(value: string, max = 24): string {
+  return value.length > max ? `${value.slice(0, max - 3)}...` : value
+}
+
+/** Label generated from the column's course or collection filters. */
+function autoLabel(column: TrendColumn, course: Course | null): string {
   if (column.mode === 'collection') {
     const { department, numberPattern, selectedTerms } = column.collection
     if (department && numberPattern) return `${department.toUpperCase()} ${numberPattern}`
@@ -263,7 +257,16 @@ function axisLabel(column: TrendColumn, course: Course | null): string {
     return 'Collection'
   }
   if (!course) return 'No course'
-  return course.name.length > 24 ? `${course.name.slice(0, 21)}...` : course.name
+  return course.name
+}
+
+/** Full column name: the user's custom label if set, otherwise the automatic one. */
+function columnName(column: TrendColumn, course: Course | null): string {
+  return column.label.trim() || autoLabel(column, course)
+}
+
+function axisLabel(column: TrendColumn, course: Course | null): string {
+  return truncate(columnName(column, course))
 }
 
 function axisTermLabel(column: TrendColumn, course: Course | null): string {
@@ -275,23 +278,29 @@ function axisTermLabel(column: TrendColumn, course: Course | null): string {
 
 // --- Export data (read by the HTML snapshot download) ---
 
+export interface TrendExportStudent extends Student {
+  /** Grade as displayed in the column. */
+  displayGrade: string
+}
+
 export interface TrendExportColumn {
   number: number
   mode: 'course' | 'collection'
   label: string
+  axisLabel: string
+  axisTerm: string
   term: string
   instructor: string | null
   meetingTime: string | null
   matchedCourseCount: number
-  students: { name: string; grade: string }[]
-  retained: number
-  lost: Student[]
-  added: Student[]
-  hasPrevious: boolean
+  width: number
+  /** Every student in the column, unfiltered; the export applies each count filter itself. */
+  students: TrendExportStudent[]
 }
 
 export interface TrendExportData {
-  svgMarkup: string
+  /** Filter selected in the app; the snapshot opens on it. */
+  countFilter: TrendCountFilter
   columns: TrendExportColumn[]
 }
 
@@ -299,6 +308,8 @@ interface TrendAnalysisProps {
   /** Columns to restore on mount; null starts a fresh analysis. */
   initialColumns: TrendColumnSnapshot[] | null
   onColumnsChange: (columns: TrendColumnSnapshot[]) => void
+  initialCountFilter: TrendCountFilter
+  onCountFilterChange: (filter: TrendCountFilter) => void
   /** Called once restoring `initialColumns` has finished loading students. */
   onRestored?: () => void
   registerExporter: (exporter: (() => TrendExportData) | null) => void
@@ -306,18 +317,25 @@ interface TrendAnalysisProps {
 
 // --- Main component ---
 
-export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, registerExporter }: TrendAnalysisProps) {
+export function TrendAnalysis({
+  initialColumns,
+  onColumnsChange,
+  initialCountFilter,
+  onCountFilterChange,
+  onRestored,
+  registerExporter,
+}: TrendAnalysisProps) {
   const courses = useAppStore((s) => s.courses)
   const setActiveStudentList = useAppStore((s) => s.setActiveStudentList)
   const [columns, setColumns] = useState<TrendColumn[]>(() => {
     if (!initialColumns || initialColumns.length === 0) return [makeColumn(), makeColumn()]
-    reserveColumnIds(initialColumns)
     return initialColumns.map((snapshot) => {
       const column = columnFromSnapshot(snapshot)
       const needsLoad = column.mode === 'collection' || (column.mode === 'course' && column.courseId)
       return needsLoad ? { ...column, loading: true } : column
     })
   })
+  const [countFilter, setCountFilter] = useState<TrendCountFilter>(initialCountFilter)
   const [zoom, setZoom] = useState(1)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [menu, setMenu] = useState<{ index: number; x: number; y: number } | null>(null)
@@ -356,13 +374,16 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
     if (stripRef.current) stripRef.current.scrollLeft = position
   }
 
-  const callbacksRef = useRef({ onColumnsChange, onRestored })
-  callbacksRef.current = { onColumnsChange, onRestored }
-  const svgRef = useRef<SVGSVGElement>(null)
+  const callbacksRef = useRef({ onColumnsChange, onCountFilterChange, onRestored })
+  callbacksRef.current = { onColumnsChange, onCountFilterChange, onRestored }
 
   useEffect(() => {
     callbacksRef.current.onColumnsChange(columns.map(columnToSnapshot))
   }, [columns])
+
+  useEffect(() => {
+    callbacksRef.current.onCountFilterChange(countFilter)
+  }, [countFilter])
 
   // Restore saved columns once, on mount (ref guard survives StrictMode re-runs).
   const restoreStartedRef = useRef(false)
@@ -371,7 +392,8 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
     restoreStartedRef.current = true
     if (!initialColumns) return
     const restoreTrend = async () => {
-      const restored = initialColumns.map(columnFromSnapshot)
+      // The columns created on mount from initialColumns, keeping their ids.
+      const restored = columns.map((column) => ({ ...column, loading: false }))
       const loaded = await Promise.all(restored.map(async (column) => {
         if (column.mode === 'course' && column.courseId) {
           try {
@@ -407,29 +429,20 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
   }, [])
 
   const selectedCourses = columns.map((col) => courses.find((c) => c.id === col.courseId) ?? null)
-  const comparisons = columns.map((col, i) =>
-    compareStudents(i > 0 ? columns[i - 1].students : null, col.students),
+  // Students counted under the current enrollment filter, per column.
+  const visibleStudents = useMemo(
+    () => columns.map((col) => filterByEnrollment(col.students, countFilter)),
+    [columns, countFilter],
+  )
+  const comparisons = visibleStudents.map((students, i) =>
+    compareStudents(i > 0 ? visibleStudents[i - 1] : null, students),
   )
 
-  const maxCount = Math.max(1, ...columns.map((col) => col.students.length))
-  const graph = useMemo(() => {
-    const gap = 8
-    const contentWidth = columns.reduce((sum, col) => sum + col.width, 0) + Math.max(0, columns.length - 1) * gap
-    const width = Math.max(640, contentWidth + 112)
-    const height = 320
-    const padX = 56
-    const padTop = 24
-    const padBottom = 88
-    const plotHeight = height - padTop - padBottom
-    let offset = padX
-    const points = columns.map((col) => {
-      const x = offset + col.width / 2
-      const y = padTop + plotHeight - (col.students.length / maxCount) * plotHeight
-      offset += col.width + gap
-      return { x, y, count: col.students.length }
-    })
-    return { width, height, padX, padTop, padBottom, points }
-  }, [columns, maxCount])
+  const graph = useMemo(
+    () => layoutTrendGraph(columns.map((col) => col.width), visibleStudents.map((students) => students.length)),
+    [columns, visibleStudents],
+  )
+  const maxCount = graph.maxCount
 
   const setColumnCourse = async (columnId: string, courseId: number) => {
     setColumns((curr) =>
@@ -461,6 +474,10 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
           : col,
       ),
     )
+  }
+
+  const setColumnLabel = (columnId: string, label: string) => {
+    setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, label } : col))
   }
 
   const setCollectionFilters = (columnId: string, collection: CollectionFilters) => {
@@ -522,9 +539,11 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
   const handleDownload = (index: number, kind: CompareKind) => {
     const column = columns[index]
     const course = selectedCourses[index]
-    const base =
-      column.mode === 'collection'
-        ? `Collection-${compareLabels[kind]}`
+    const customLabel = column.label.trim()
+    const base = customLabel
+      ? `${customLabel}-${compareLabels[kind]}`
+      : column.mode === 'collection'
+        ? `${autoLabel(column, course)}-${compareLabels[kind]}`
         : course
           ? `${course.term_name}-${course.name}-${compareLabels[kind]}`
           : compareLabels[kind]
@@ -555,34 +574,26 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
   }
 
   // Latest render data for the HTML snapshot export.
-  const exportDataRef = useRef<() => TrendExportData>(() => ({ svgMarkup: '', columns: [] }))
+  const exportDataRef = useRef<() => TrendExportData>(() => ({ countFilter: 'all', columns: [] }))
   exportDataRef.current = () => ({
-    svgMarkup: (() => {
-      // Export at natural (unzoomed) size.
-      const clone = svgRef.current?.cloneNode(true) as SVGSVGElement | undefined
-      if (!clone) return ''
-      clone.setAttribute('width', String(graph.width))
-      clone.setAttribute('height', String(graph.height))
-      return clone.outerHTML
-    })(),
+    countFilter,
     columns: columns.map((column, index) => {
       const course = selectedCourses[index]
       return {
         number: index + 1,
         mode: column.mode,
-        label: column.mode === 'course' ? course?.name ?? 'No course' : axisLabel(column, course),
+        label: columnName(column, course),
+        axisLabel: axisLabel(column, course),
+        axisTerm: axisTermLabel(column, course),
         term: axisTermLabel(column, course),
         instructor: column.mode === 'course' ? course?.instructor ?? null : null,
         meetingTime: column.mode === 'course' ? course?.meeting_time ?? null : null,
         matchedCourseCount: column.matchedCourseCount,
+        width: column.width,
         students: column.students.map((student) => ({
-          name: `${student.first_name} ${student.last_name}`,
-          grade: gradeFor(student, column.courseId),
+          ...student,
+          displayGrade: gradeFor(student, column.courseId),
         })),
-        retained: comparisons[index].retained.length,
-        lost: comparisons[index].lost,
-        added: comparisons[index].added,
-        hasPrevious: index > 0,
       }
     }),
   })
@@ -609,10 +620,20 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
           <button className="trend-icon-button" title="Zoom in" onClick={() => setZoom((v) => Math.min(2, v + 0.2))}>
             +
           </button>
+          <label className="trend-count-filter" title="Which students are counted in each column">
+            <span>Count</span>
+            <select
+              value={countFilter}
+              onChange={(e) => setCountFilter(e.target.value as TrendCountFilter)}
+            >
+              {countFilters.map((key) => (
+                <option key={key} value={key}>{countFilterLabels[key]}</option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="trend-graph__viewport">
           <svg
-            ref={svgRef}
             className="trend-graph__svg"
             width={graph.width * zoom}
             height={graph.height}
@@ -620,7 +641,7 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
           >
             <line className="trend-graph__axis" x1={graph.padX} y1={graph.height - graph.padBottom} x2={graph.width - graph.padX} y2={graph.height - graph.padBottom} />
             <line className="trend-graph__axis" x1={graph.padX} y1={graph.padTop} x2={graph.padX} y2={graph.height - graph.padBottom} />
-            {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+            {GRAPH_TICKS.map((tick) => {
               const y = graph.padTop + (1 - tick) * (graph.height - graph.padTop - graph.padBottom)
               return (
                 <g key={tick}>
@@ -657,6 +678,7 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
                   {point.count}
                 </text>
                 <text className="trend-graph__x-label" x={point.x} y={graph.height - 54} textAnchor="middle">
+                  <title>{columnName(columns[index], selectedCourses[index])}</title>
                   {axisLabel(columns[index], selectedCourses[index])}
                 </text>
                 <text className="trend-graph__x-term" x={point.x} y={graph.height - 36} textAnchor="middle">
@@ -668,7 +690,7 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
           {hoveredIndex !== null && hoveredComparison && (
             <div className="trend-tooltip">
               <div className="trend-tooltip__title">
-                {axisLabel(columns[hoveredIndex], selectedCourses[hoveredIndex])}
+                {columnName(columns[hoveredIndex], selectedCourses[hoveredIndex])}
               </div>
               <div>Retained: {hoveredComparison.retained.length}</div>
               <div>Lost: {hoveredComparison.lost.length}</div>
@@ -700,7 +722,7 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
                 className={`trend-column${column.mode === 'collection' ? ' trend-column--collection' : ''}`}
                 key={column.id}
                 style={{ width: column.width, minWidth: column.width }}
-                onDoubleClick={() => setActiveStudentList(column.students)}
+                onDoubleClick={() => setActiveStudentList(visibleStudents[index])}
               >
                 <div className="trend-column__header">
                   <span className="trend-column__number">{index + 1}</span>
@@ -723,6 +745,16 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
                   </button>
                 </div>
 
+                <input
+                  className="trend-column__label-input"
+                  aria-label="Column label"
+                  title="Custom label shown on the graph (leave empty for the automatic label)"
+                  placeholder={`Label: ${autoLabel(column, course)}`}
+                  value={column.label}
+                  onChange={(e) => setColumnLabel(column.id, e.target.value)}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                />
+
                 {column.mode === 'course' ? (
                   <CourseSelect
                     courses={courses}
@@ -741,7 +773,7 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
                 <div className="trend-column__meta">
                   <div>
                     <span>Students</span>
-                    <strong>{column.loading ? '...' : column.students.length}</strong>
+                    <strong>{column.loading ? '...' : visibleStudents[index].length}</strong>
                   </div>
                   {column.mode === 'collection' ? (
                     <div>
@@ -765,7 +797,7 @@ export function TrendAnalysis({ initialColumns, onColumnsChange, onRestored, reg
                 {column.error && <div className="trend-column__error">{column.error}</div>}
 
                 <ul className="trend-student-list">
-                  {column.students.map((student) => (
+                  {visibleStudents[index].map((student) => (
                     <li key={student.id} className="trend-student">
                       <span className="trend-student__name">{student.first_name} {student.last_name}</span>
                       <span className="trend-student__grade">{gradeFor(student, column.courseId)}</span>

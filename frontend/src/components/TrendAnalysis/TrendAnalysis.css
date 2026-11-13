@@ -284,6 +284,13 @@
   background: var(--color-accent-blue);
 }
 
+.trend-column__label-input {
+  width: 100%;
+  min-height: 28px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
 .trend-course-select {
   width: 100%;
   min-height: 30px;
@@ -629,4 +636,176 @@
 
 .trend-tabs__panel--active {
   display: block;
+}
+
+/* Enrollment count filter in the graph toolbar */
+.trend-count-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.trend-count-filter select {
+  height: 24px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+/* --- Tab colors --- */
+
+.trend-tabs__tab {
+  border-bottom: 2px solid var(--tab-color, transparent);
+}
+
+.trend-tabs__color {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--color-surface-border);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.trend-tabs__color::-webkit-color-swatch-wrapper { padding: 0; }
+.trend-tabs__color::-webkit-color-swatch { border: none; border-radius: 50%; }
+.trend-tabs__color::-moz-color-swatch { border: none; border-radius: 50%; }
+
+.trend-tabs__tab--combined {
+  font-weight: 600;
+  border-bottom-color: var(--color-text-primary);
+}
+
+.trend-tabs__divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--space-1);
+  background: var(--color-surface-border);
+}
+
+/* --- Combined view --- */
+
+.trend-combined {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-bg-base);
+}
+
+.trend-combined__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-surface-border);
+  background: var(--color-bg-overlay);
+}
+
+.trend-combined__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.trend-combined__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-surface-border);
+  border-radius: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.trend-combined__toggle:hover {
+  background: var(--color-bg-hover);
+}
+
+.trend-combined__toggle--on {
+  color: var(--color-text-heading);
+  border-color: var(--series-color);
+}
+
+.trend-combined__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--series-color);
+}
+
+.trend-combined__toggle--on .trend-combined__swatch {
+  background: var(--series-color);
+}
+
+.trend-combined__zoom {
+  display: flex;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+
+.trend-combined__note {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.trend-combined__viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.trend-combined__svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.trend-combined__empty {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.trend-combined__line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.trend-combined__dot {
+  fill: currentColor;
+  stroke: var(--color-bg-base);
+  stroke-width: 2;
+  cursor: pointer;
+}
+
+.trend-combined__dot:hover {
+  stroke: var(--color-text-heading);
+}
+
+.trend-combined__count {
+  fill: currentColor;
+  font-size: 11px;
+}
+
+.trend-combined__x-label {
+  fill: currentColor;
+  font-size: 11px;
+  font-weight: 600;
 }

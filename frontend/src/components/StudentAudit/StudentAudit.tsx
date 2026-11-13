@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import type { Course, Term } from '../../api/types'
 import { useAppStore } from '../../store/appStore'
+import { uniqueId } from '../../lib/ids'
 import { ChipInput } from '../CourseSearch/ChipInput'
 import { SearchableSelect } from './SearchableSelect'
 import './StudentAudit.css'
@@ -35,8 +36,7 @@ const COLUMNS: { label: string; key: SortKey }[] = [
   { label: 'Grade', key: 'grade' },
 ]
 
-let semesterCounter = 0
-const nextSemesterId = () => `semester-${++semesterCounter}`
+const nextSemesterId = () => uniqueId('semester')
 
 function makeSemesterAudit(): SemesterAudit {
   return {

@@ -1,0 +1,1 @@
+ In Trend Analysis, can allow the user to define the name of each entry? for now, if I just do a collection, it apears to be just named Collection. on the horizontal axis, not very informative. 
