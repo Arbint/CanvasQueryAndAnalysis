@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { GraphSnapshot } from '../../store/appStore'
 import { useGraphLibrary, type AggregationGraphRef } from '../../store/graphLibraryStore'
 import { GraphEditorModal } from '../NodeGraph/GraphEditorModal'
+import type { GraphScope } from '../../lib/graphEvaluation'
 import '../shared/CollectionFilter.css'
 
 interface GraphPickerProps {
@@ -10,6 +11,8 @@ interface GraphPickerProps {
   graph: AggregationGraphRef | null
   /** Called with the graph to use; also after the card's graph is edited, so it re-collects. */
   onChange: (graph: AggregationGraphRef) => void
+  /** The card's Terms / Department, applied while editing the graph. */
+  scope: GraphScope
 }
 
 type Editing =
@@ -24,7 +27,7 @@ const EMPTY_GRAPH: GraphSnapshot = { nodes: [], edges: [] }
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
 /** Picks, creates, edits or duplicates the aggregation graph a trend card uses. */
-export function GraphPicker({ graph, onChange }: GraphPickerProps) {
+export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
   const library = useGraphLibrary((s) => s.graphs)
   const saveGraph = useGraphLibrary((s) => s.saveGraph)
   const [menu, setMenu] = useState<{ left: number; top: number; width: number } | null>(null)
@@ -166,6 +169,7 @@ export function GraphPicker({ graph, onChange }: GraphPickerProps) {
       {editing && (
         <GraphEditorModal
           title={editing.kind === 'new' ? 'New aggregation graph' : editing.kind === 'edit' ? 'Edit aggregation graph' : 'Save a copy of the graph'}
+          scope={scope}
           initialName={editing.kind === 'new' ? '' : editing.name}
           initialGraph={editing.kind === 'new' ? EMPTY_GRAPH : editing.graph}
           onSave={handleSave}

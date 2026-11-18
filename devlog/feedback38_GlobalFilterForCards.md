@@ -1,0 +1,1 @@
+For each of the card that is set to be Aggregation Graph, since there is already terms settings, when configuring and running the attached aggregation, automatically apply the term filters set on the card, so the querying can be faster.

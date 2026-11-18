@@ -9,7 +9,7 @@ import {
   type CourseCollectionFilters,
 } from '../../../lib/courseCollectionFilter'
 import { union } from '../../../lib/setOperations'
-import { useAppStore } from '../../../store/appStore'
+import { useScopedCourses } from '../graphScope'
 import { useResolvedCollectionFilters } from '../../../store/filterLibraryStore'
 import { CourseCollectionFilterPanel } from '../../shared/CourseCollectionFilterPanel'
 import { NodeCountBadge, NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
@@ -27,7 +27,8 @@ export interface CourseCollectionNodeData extends Record<string, unknown> {
 }
 
 export function CourseCollectionNode({ id, data }: NodeProps) {
-  const courses = useAppStore((s) => s.courses)
+  // Inside a Trend Analysis card's graph editor: only the card's Terms / Department.
+  const courses = useScopedCourses()
   const { setNodes } = useReactFlow()
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
   const studentCount = useNodeStudentCount(id)

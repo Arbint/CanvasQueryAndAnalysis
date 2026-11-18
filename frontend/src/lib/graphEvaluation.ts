@@ -16,6 +16,15 @@ export interface GraphScope {
   department: string
 }
 
+/** Whether a course is within a card's scope (its Terms and Department; empty means any). */
+export function courseInScope(course: Course, scope: GraphScope): boolean {
+  return courseMatchesFilters(course, { selectedTerms: scope.selectedTerms, department: scope.department, filter: null })
+}
+
+export function hasScope(scope: GraphScope | null | undefined): scope is GraphScope {
+  return Boolean(scope && (scope.selectedTerms.length > 0 || scope.department.trim()))
+}
+
 export interface GraphEvaluation {
   students: Student[]
   /** Distinct courses whose students were used. */
@@ -29,7 +38,6 @@ export function graphSourceCourses(
   scope: GraphScope,
   filterLibrary: SavedFilterExpression[],
 ): Record<string, number[]> {
-  const scopeFilters = { selectedTerms: scope.selectedTerms, department: scope.department, filter: null }
   const sources: Record<string, number[]> = {}
   for (const node of graph.nodes) {
     if (!isSourceNodeType(node.type)) continue
@@ -41,7 +49,7 @@ export function graphSourceCourses(
     } else {
       const filters = resolveCollectionFilters(normalizeCollectionFilters(data as StoredCollectionFilters), filterLibrary)
       sources[node.id] = courses
-        .filter((c) => courseMatchesFilters(c, filters) && courseMatchesFilters(c, scopeFilters))
+        .filter((c) => courseMatchesFilters(c, filters) && courseInScope(c, scope))
         .map((c) => c.id)
     }
   }

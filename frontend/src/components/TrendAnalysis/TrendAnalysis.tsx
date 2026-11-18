@@ -204,7 +204,7 @@ function GraphCardUI({
       </div>
       <div className="collection-filter">
         <div className="collection-filter__label">Aggregation Graph</div>
-        <GraphPicker graph={graph} onChange={onGraphChange} />
+        <GraphPicker graph={graph} onChange={onGraphChange} scope={graphScope(column)} />
       </div>
       <div className="collection-collect-row">
         <span className={`collection-section-label${stale ? ' trend-graph-card__stale' : ''}`}>

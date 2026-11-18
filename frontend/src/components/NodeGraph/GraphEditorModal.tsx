@@ -6,11 +6,15 @@ import type { GraphSnapshot } from '../../store/appStore'
 import { useAppStore } from '../../store/appStore'
 import { GraphCanvas } from './GraphCanvas'
 import { OUTPUT_NODE_TYPE, ensureSingleOutputNode } from './graphEngine'
+import { GraphScopeContext } from './graphScope'
+import { hasScope, type GraphScope } from '../../lib/graphEvaluation'
 import '../CourseSearch/PresetEditorModal.css'
 import './NodeGraph.css'
 
 interface GraphEditorModalProps {
   title: string
+  /** The card's Terms / Department: nodes only consider courses within it. */
+  scope?: GraphScope | null
   initialName: string
   initialGraph: GraphSnapshot
   onSave: (name: string, graph: GraphSnapshot) => void
@@ -20,10 +24,10 @@ interface GraphEditorModalProps {
 /** Comparable form of a graph: what would be saved. */
 const graphKey = (graph: GraphSnapshot) => JSON.stringify(cleanGraphSnapshot(graph))
 
-/** Stops events reaching React ancestors (the trend card's double-click, the node graph's keys). */
+/** Stops mouse events reaching React ancestors (e.g. the trend card's double-click). */
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
-function GraphEditor({ title, initialName, initialGraph, onSave, onCancel }: GraphEditorModalProps) {
+function GraphEditor({ title, scope, initialName, initialGraph, onSave, onCancel }: GraphEditorModalProps) {
   const [start] = useState(() => ensureSingleOutputNode(initialGraph.nodes, initialGraph.edges))
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(start.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(start.edges)
@@ -66,6 +70,14 @@ function GraphEditor({ title, initialName, initialGraph, onSave, onCancel }: Gra
         Tab adds a node. The card's students are whatever connects to the <strong>Output</strong> node.
         {!outputConnected && <span className="graph-editor__warn"> Nothing is connected to Output yet.</span>}
       </div>
+      {hasScope(scope) && (
+        <div className="graph-editor__scope">
+          Card filters applied: courses in{' '}
+          <strong>{scope.selectedTerms.length ? scope.selectedTerms.join(', ') : 'any term'}</strong>
+          {scope.department.trim() && <> · department <strong>{scope.department.trim().toUpperCase()}</strong></>}
+          . Course Collection nodes only match these courses (as when the card runs the graph); Course nodes list only these.
+        </div>
+      )}
       <div className="graph-editor__canvas">
         <GraphCanvas
           nodes={nodes}
@@ -96,12 +108,16 @@ export function GraphEditorModal(props: GraphEditorModalProps) {
       onClick={stop}
       onDoubleClick={stop}
       onContextMenu={stop}
-      onKeyDown={stop}
       onWheel={stop}
+      // Key presses are NOT stopped: React Flow listens for Delete on the
+      // document, and this pop-up lives in document.body, so stopping them
+      // here would keep nodes from being deleted.
     >
       {/* Its own provider: independent of the Aggregation Graph tab's canvas. */}
       <ReactFlowProvider>
-        <GraphEditor {...props} />
+        <GraphScopeContext.Provider value={hasScope(props.scope) ? props.scope : null}>
+          <GraphEditor {...props} />
+        </GraphScopeContext.Provider>
       </ReactFlowProvider>
     </div>,
     document.body,

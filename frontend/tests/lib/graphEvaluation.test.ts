@@ -118,3 +118,16 @@ describe('saved graph references and sessions', () => {
     })).toBe(true)
   })
 })
+
+describe('card scope', () => {
+  it('limits courses by the card Terms and Department; an empty scope allows all', async () => {
+    const { courseInScope, hasScope } = await import('../../src/lib/graphEvaluation')
+    const c = course(1, 'GAMD 3170 01', 'Fall 2025')
+    expect(hasScope({ selectedTerms: [], department: ' ' })).toBe(false)
+    expect(hasScope({ selectedTerms: ['Fall 2025'], department: '' })).toBe(true)
+    expect(courseInScope(c, { selectedTerms: ['Fall 2025'], department: '' })).toBe(true)
+    expect(courseInScope(c, { selectedTerms: ['Spring 2026'], department: '' })).toBe(false)
+    expect(courseInScope(c, { selectedTerms: [], department: 'angd' })).toBe(false)
+    expect(courseInScope(c, { selectedTerms: [], department: '' })).toBe(true)
+  })
+})

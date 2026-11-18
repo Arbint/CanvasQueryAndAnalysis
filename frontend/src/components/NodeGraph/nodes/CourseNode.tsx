@@ -4,6 +4,7 @@ import { api } from '../../../api/client'
 import type { Course, Student } from '../../../api/types'
 import { useAppStore } from '../../../store/appStore'
 import { NodeCountBadge, NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
+import { useScopedCourses } from '../graphScope'
 import '../NodeGraph.css'
 
 export interface CourseNodeData extends Record<string, unknown> {
@@ -103,7 +104,9 @@ function SearchableSelect({ courses, value, onChange }: SearchableSelectProps) {
 }
 
 export function CourseNode({ id, data }: NodeProps) {
-  const courses = useAppStore((s) => s.courses)
+  const allCourses = useAppStore((s) => s.courses)
+  // Inside a Trend Analysis card's graph editor: only the card's Terms / Department.
+  const scopedCourses = useScopedCourses()
   const { setNodes } = useReactFlow()
   const { expanded, toggleExpand, expandedStudents } = useNodeExpand(id)
   const studentCount = useNodeStudentCount(id)
@@ -111,6 +114,11 @@ export function CourseNode({ id, data }: NodeProps) {
     (data as CourseNodeData).selectedCourseId ?? null
   )
   const [loading, setLoading] = useState(false)
+  // Keep an already-chosen course listed even when it is outside the card's scope.
+  const selectedOutside = scopedCourses.some((c) => c.id === selectedCourseId)
+    ? null
+    : allCourses.find((c) => c.id === selectedCourseId) ?? null
+  const courses = selectedOutside ? [selectedOutside, ...scopedCourses] : scopedCourses
 
   useEffect(() => {
     if (!selectedCourseId) return
