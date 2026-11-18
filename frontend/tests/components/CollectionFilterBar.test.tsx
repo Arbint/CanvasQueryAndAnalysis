@@ -92,4 +92,32 @@ describe('CollectionFilterBar', () => {
     expect(useFilterLibrary.getState().filters).toMatchObject([{ name: 'Converted filter', expression: '$3***' }])
     expect(screen.queryByText('(unsaved)')).not.toBeInTheDocument()
   })
+
+  it('searches saved expressions by keywords in the name or expression', async () => {
+    useFilterLibrary.setState({ filters: [
+      { id: 'f1', name: 'Game art', expression: '$2*3*' },
+      { id: 'f2', name: 'Upper level', expression: '$3*** and #2025' },
+      { id: 'f3', name: 'Jing courses', expression: '@Jing' },
+    ] })
+    const user = userEvent.setup()
+    render(<Harness />)
+    await user.click(screen.getByRole('button', { name: /Set Filter/ }))
+    const search = screen.getByLabelText('Search saved expressions')
+    expect(search).toHaveFocus()
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toHaveLength(4) // 3 + "New expression"
+
+    await user.type(search, '2025 upper')
+    expect(screen.getByRole('menuitem', { name: /Upper level/ })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Game art/ })).not.toBeInTheDocument()
+
+    await user.clear(search)
+    await user.type(search, 'nothing-like-this')
+    expect(screen.getByText(/No saved expressions match/)).toBeInTheDocument()
+
+    // Enter picks the first match.
+    await user.clear(search)
+    await user.type(search, '@jing{Enter}')
+    expect(screen.getByText('Jing courses')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Search saved expressions')).not.toBeInTheDocument()
+  })
 })

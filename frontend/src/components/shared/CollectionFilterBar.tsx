@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CollectionFilterRef } from '../../lib/courseCollectionFilter'
 import { compileFilterExpression } from '../../lib/filterExpression'
+import { matchesKeywords } from '../../lib/keywordSearch'
 import { useFilterLibrary } from '../../store/filterLibraryStore'
 import { HighlightedExpression } from './FilterExpressionEditor'
 import { FilterExpressionModal } from './FilterExpressionModal'
@@ -33,6 +34,8 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
   const saveFilter = useFilterLibrary((s) => s.saveFilter)
   const deleteFilter = useFilterLibrary((s) => s.deleteFilter)
   const [menu, setMenu] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [query, setQuery] = useState('')
+  const matches = library.filter((f) => matchesKeywords(query, f.name, f.expression))
   const [editing, setEditing] = useState<Editing | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -66,7 +69,13 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
     if (!rect) return
     const width = Math.max(260, rect.width)
     const left = Math.min(rect.left, window.innerWidth - width - 8)
+    setQuery('')
     setMenu({ left: Math.max(8, left), top: rect.bottom + 4, width })
+  }
+
+  const pick = (f: { id: string; name: string; expression: string }) => {
+    onChange({ id: f.id, name: f.name, expression: f.expression })
+    setMenu(null)
   }
 
   const editCurrent = () => {
@@ -132,19 +141,32 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
             if (e.key === 'Escape') setMenu(null)
           }}
         >
+          {library.length > 0 && (
+            <input
+              className="fx-menu__search"
+              type="search"
+              autoFocus
+              placeholder="Search by name or expression…"
+              aria-label="Search saved expressions"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && matches.length > 0) pick(matches[0])
+              }}
+            />
+          )}
           {library.length === 0 ? (
             <div className="fx-menu__empty">No saved expressions yet.</div>
+          ) : matches.length === 0 ? (
+            <div className="fx-menu__empty">No saved expressions match “{query.trim()}”.</div>
           ) : (
-            library.map((f) => (
+            matches.map((f) => (
               <div key={f.id} className={`fx-menu__item${filter?.id === f.id ? ' fx-menu__item--active' : ''}`}>
                 <button
                   className="fx-menu__select"
                   role="menuitem"
                   title={f.expression}
-                  onClick={() => {
-                    onChange({ id: f.id, name: f.name, expression: f.expression })
-                    setMenu(null)
-                  }}
+                  onClick={() => pick(f)}
                 >
                   <span className="fx-menu__name">{f.name}</span>
                   <code className="fx-menu__expr"><HighlightedExpression source={f.expression} /></code>

@@ -131,6 +131,18 @@
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
 
+/* Stays at the top while a long list scrolls. */
+.fx-menu__search {
+  position: sticky;
+  top: -4px;
+  z-index: 1;
+  flex: 0 0 auto;
+  margin-bottom: 4px;
+  box-shadow: 0 -4px 0 var(--color-bg-elevated);
+  padding: 4px var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
 .fx-menu__empty {
   padding: var(--space-2);
   color: var(--color-text-muted);

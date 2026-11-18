@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { GraphSnapshot } from '../../store/appStore'
-import { useGraphLibrary, type AggregationGraphRef } from '../../store/graphLibraryStore'
+import { useGraphLibrary, type AggregationGraphRef, type SavedAggregationGraph } from '../../store/graphLibraryStore'
+import { matchesKeywords } from '../../lib/keywordSearch'
 import { GraphEditorModal } from '../NodeGraph/GraphEditorModal'
 import type { GraphScope } from '../../lib/graphEvaluation'
 import '../shared/CollectionFilter.css'
@@ -24,6 +25,17 @@ type Editing =
 
 const EMPTY_GRAPH: GraphSnapshot = { nodes: [], edges: [] }
 
+/** What a saved graph can be found by: its name, and its Course Collection nodes' filters and departments. */
+function graphSearchText(g: SavedAggregationGraph): string[] {
+  const fields = [g.name]
+  for (const node of g.graph.nodes) {
+    if (node.type !== 'courseCollectionNode') continue
+    const data = node.data as { department?: string; filter?: { name?: string; expression?: string } | null }
+    fields.push(data.department ?? '', data.filter?.name ?? '', data.filter?.expression ?? '')
+  }
+  return fields
+}
+
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
 /** Picks, creates, edits or duplicates the aggregation graph a trend card uses. */
@@ -31,6 +43,8 @@ export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
   const library = useGraphLibrary((s) => s.graphs)
   const saveGraph = useGraphLibrary((s) => s.saveGraph)
   const [menu, setMenu] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [query, setQuery] = useState('')
+  const matches = library.filter((g) => matchesKeywords(query, ...graphSearchText(g)))
   const [editing, setEditing] = useState<Editing | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -63,7 +77,13 @@ export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
     if (!rect) return
     const width = Math.max(280, rect.width)
     const left = Math.min(rect.left, window.innerWidth - width - 8)
+    setQuery('')
     setMenu({ left: Math.max(8, left), top: rect.bottom + 4, width })
+  }
+
+  const pick = (g: SavedAggregationGraph) => {
+    onChange({ id: g.id, name: g.name, graph: g.graph })
+    setMenu(null)
   }
 
   const open = (next: Editing) => {
@@ -122,18 +142,31 @@ export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
             if (e.key === 'Escape') setMenu(null)
           }}
         >
+          {library.length > 0 && (
+            <input
+              className="fx-menu__search"
+              type="search"
+              autoFocus
+              placeholder="Search by name, filter or department…"
+              aria-label="Search saved graphs"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && matches.length > 0) pick(matches[0])
+              }}
+            />
+          )}
           {library.length === 0 ? (
             <div className="fx-menu__empty">No saved graphs yet.</div>
+          ) : matches.length === 0 ? (
+            <div className="fx-menu__empty">No saved graphs match “{query.trim()}”.</div>
           ) : (
-            library.map((g) => (
+            matches.map((g) => (
               <div key={g.id} className={`fx-menu__item${graph?.id === g.id ? ' fx-menu__item--active' : ''}`}>
                 <button
                   className="fx-menu__select"
                   role="menuitem"
-                  onClick={() => {
-                    onChange({ id: g.id, name: g.name, graph: g.graph })
-                    setMenu(null)
-                  }}
+                  onClick={() => pick(g)}
                 >
                   <span className="fx-menu__name">{g.name}</span>
                   <span className="graph-chip__meta">
