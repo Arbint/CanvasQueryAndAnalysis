@@ -72,19 +72,97 @@ export function sessionTrendAnalyses(session: SavedSession): TrendAnalysisSnapsh
   return []
 }
 
-export function downloadSession(session: SavedSession) {
-  const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' })
+function downloadJson(data: unknown, fileName: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `canvas-query-session-${new Date().toISOString().slice(0, 10)}.json`
+  link.download = fileName
   link.click()
   URL.revokeObjectURL(url)
 }
 
+const today = () => new Date().toISOString().slice(0, 10)
+
+export function downloadSession(session: SavedSession) {
+  downloadJson(session, `canvas-query-session-${today()}.json`)
+}
+
+// --- Trend Analysis configuration files ---
+// Just the course search (so the courses can be found again) and the trend
+// analyses; loading one leaves the aggregation graph alone.
+
+export const TREND_CONFIG_KIND = 'canvas-query-trend-config'
+
+export interface TrendConfigFile {
+  kind: typeof TREND_CONFIG_KIND
+  version: 1
+  savedAt: string
+  courseSearch: SavedSession['courseSearch']
+  trend: { analyses: TrendAnalysisSnapshot[] }
+}
+
+export function buildTrendConfig(
+  courseSearch: SavedSession['courseSearch'],
+  analyses: TrendAnalysisSnapshot[],
+  savedAt = new Date(),
+): TrendConfigFile {
+  return {
+    kind: TREND_CONFIG_KIND,
+    version: 1,
+    savedAt: savedAt.toISOString(),
+    courseSearch: {
+      selectedAccountId: courseSearch.selectedAccountId,
+      selectedTermIds: [...courseSearch.selectedTermIds],
+      keywords: [...courseSearch.keywords],
+    },
+    trend: { analyses: cleanTrendAnalyses(analyses) },
+  }
+}
+
+export function downloadTrendConfig(config: TrendConfigFile) {
+  downloadJson(config, `trend-analysis-config-${today()}.json`)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isCourseSearch(value: unknown): value is SavedSession['courseSearch'] {
+  return isRecord(value) && Array.isArray(value.selectedTermIds) && Array.isArray(value.keywords)
+}
+
+/**
+ * Parses a Trend Analysis configuration file. A full session file is also
+ * accepted; only its course search and trend analyses are used.
+ * The result is a session without a graph, ready for the session loader.
+ */
+export function parseTrendConfig(text: string): SavedSession {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Error('Not a JSON file')
+  }
+  if (!isRecord(parsed) || parsed.version !== 1 || !isCourseSearch(parsed.courseSearch) || !isRecord(parsed.trend)) {
+    throw new Error('Not a Trend Analysis configuration or session file')
+  }
+  const session = parsed as unknown as SavedSession
+  const analyses = sessionTrendAnalyses(session)
+  if (!Array.isArray(analyses)) throw new Error('The file has no trend analyses')
+  return {
+    version: 1,
+    savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : new Date().toISOString(),
+    courseSearch: session.courseSearch,
+    trend: { analyses },
+  }
+}
+
 export async function readSessionFile(file: File): Promise<SavedSession> {
   const text = await file.text()
-  const parsed = JSON.parse(text) as SavedSession
+  const parsed = JSON.parse(text) as SavedSession & { kind?: string }
+  // A Trend Analysis configuration loads too: it just leaves the graph alone.
+  if (parsed.kind === TREND_CONFIG_KIND) return parseTrendConfig(text)
   if (parsed.version !== 1 || !parsed.courseSearch || !parsed.graph || !parsed.trend) {
     throw new Error('Unsupported session file')
   }
@@ -123,7 +201,7 @@ export function isEmptySession(session: SavedSession): boolean {
   const analyses = sessionTrendAnalyses(session)
   return (
     !session.courseSearch.selectedAccountId &&
-    session.graph.nodes.length === 0 &&
+    (session.graph?.nodes.length ?? 0) === 0 &&
     analyses.every((a) => a.columns.every((c) => !c.courseId && c.mode === 'course'))
   )
 }

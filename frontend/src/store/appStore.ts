@@ -54,6 +54,24 @@ export interface TrendAnalysisSnapshot {
   inCombined?: boolean
 }
 
+/** Stages of loading a session or Trend Analysis configuration, in order. */
+export const LOAD_STAGES = ['reading', 'searching', 'courses', 'tabs', 'columns', 'done'] as const
+export type LoadStage = (typeof LOAD_STAGES)[number]
+
+/** Shown in the loading pop-up while a session or configuration file loads. */
+export interface LoadProgress {
+  title: string
+  stage: LoadStage
+  /** What is happening right now. */
+  message: string
+  columnsDone: number
+  columnsTotal: number
+  /** Problems that did not stop the load (e.g. a column whose students failed to load). */
+  warnings: string[]
+  /** A failure that stopped the load. */
+  error: string | null
+}
+
 export type WorkTab = 'aggregation' | 'trend' | 'audit' | 'gradeReport' | 'courseGrades'
 
 export interface SavedSession {
@@ -64,7 +82,8 @@ export interface SavedSession {
     selectedTermIds: string[]
     keywords: string[]
   }
-  graph: GraphSnapshot
+  /** Absent in Trend Analysis configuration files: loading one leaves the graph as it is. */
+  graph?: GraphSnapshot
   trend: {
     /** Multiple independent analyses (current format). */
     analyses?: TrendAnalysisSnapshot[]
@@ -110,6 +129,13 @@ interface AppStore {
   setPendingSessionLoad: (session: SavedSession | null) => void
   loadStatus: string | null
   setLoadStatus: (status: string | null) => void
+
+  /** Loading pop-up state; null when no explicit load is showing. */
+  loadProgress: LoadProgress | null
+  startLoadProgress: (title: string) => void
+  /** Updates the pop-up; does nothing when none is showing (e.g. the silent auto-save restore). */
+  updateLoadProgress: (update: Partial<LoadProgress> | ((current: LoadProgress) => Partial<LoadProgress>)) => void
+  closeLoadProgress: () => void
 }
 
 export const useAppStore = create<AppStore>()((set) => ({
@@ -154,6 +180,25 @@ export const useAppStore = create<AppStore>()((set) => ({
   setPendingSessionLoad: (session) => set({ pendingSessionLoad: session }),
   loadStatus: null,
   setLoadStatus: (status) => set({ loadStatus: status }),
+
+  loadProgress: null,
+  startLoadProgress: (title) => set({
+    loadProgress: {
+      title,
+      stage: 'reading',
+      message: 'Reading file...',
+      columnsDone: 0,
+      columnsTotal: 0,
+      warnings: [],
+      error: null,
+    },
+  }),
+  updateLoadProgress: (update) => set((state) => {
+    if (!state.loadProgress) return {}
+    const patch = typeof update === 'function' ? update(state.loadProgress) : update
+    return { loadProgress: { ...state.loadProgress, ...patch } }
+  }),
+  closeLoadProgress: () => set({ loadProgress: null }),
 }))
 
 // Dev only: when this file is hot-updated, Vite re-runs it and a brand-new,

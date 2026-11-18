@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { downloadTrendSnapshot } from '../../lib/trendExport'
 import { ANALYSIS_COLORS, defaultAnalysisColor, seriesColumns, type CombinedSeries } from '../../lib/trendData'
+import { buildTrendConfig, downloadTrendConfig, parseTrendConfig } from '../../lib/sessionPersistence'
 import { CombinedTrendView } from './CombinedTrendView'
+import { LoadProgressModal } from './LoadProgressModal'
 import { uniqueId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
 import type { TrendColumnSnapshot, TrendCountFilter } from '../../store/appStore'
-import { TrendAnalysis, type TrendExportData } from './TrendAnalysis'
+import { TrendAnalysis, columnNeedsLoad, type TrendExportData } from './TrendAnalysis'
 
 interface AnalysisTab {
   id: string
@@ -51,6 +53,10 @@ export function TrendAnalysisTabs() {
   const pendingTrendAnalyses = useAppStore((s) => s.pendingTrendAnalyses)
   const setPendingTrendAnalyses = useAppStore((s) => s.setPendingTrendAnalyses)
   const setLoadStatus = useAppStore((s) => s.setLoadStatus)
+  const setPendingSessionLoad = useAppStore((s) => s.setPendingSessionLoad)
+  const startLoadProgress = useAppStore((s) => s.startLoadProgress)
+  const updateLoadProgress = useAppStore((s) => s.updateLoadProgress)
+  const configInputRef = useRef<HTMLInputElement>(null)
 
   const [tabs, setTabs] = useState<AnalysisTab[]>(() => [makeTab('Analysis 1', defaultAnalysisColor(0))])
   const [activeId, setActiveId] = useState(() => tabs[0].id)
@@ -108,14 +114,72 @@ export function TrendAnalysisTabs() {
     setActiveId((curr) => (curr === COMBINED_ID ? COMBINED_ID : restored[0].id))
     setRenamingId(null)
     setPendingTrendAnalyses(null)
+    const columnsTotal = pendingTrendAnalyses.reduce((sum, a) => sum + a.columns.filter(columnNeedsLoad).length, 0)
+    const columnCount = pendingTrendAnalyses.reduce((sum, a) => sum + a.columns.length, 0)
+    updateLoadProgress({
+      stage: columnsTotal > 0 ? 'columns' : 'done',
+      message: columnsTotal > 0
+        ? `Updating ${restored.length} tab${restored.length === 1 ? '' : 's'} (${restored.map((t) => t.name).join(', ')}): loading students...`
+        : `Loaded ${restored.length} tab${restored.length === 1 ? '' : 's'}, ${columnCount} column${columnCount === 1 ? '' : 's'}`,
+      columnsDone: 0,
+      columnsTotal,
+    })
     if (pendingRestoresRef.current > 0) setLoadStatus('Populating trend analysis...')
     else setLoadStatus(null)
-  }, [pendingTrendAnalyses, setLoadStatus, setPendingTrendAnalyses])
+  }, [pendingTrendAnalyses, setLoadStatus, setPendingTrendAnalyses, updateLoadProgress])
 
   const handleRestored = useCallback(() => {
     pendingRestoresRef.current = Math.max(0, pendingRestoresRef.current - 1)
-    if (pendingRestoresRef.current === 0) setLoadStatus(null)
-  }, [setLoadStatus])
+    if (pendingRestoresRef.current === 0) {
+      setLoadStatus(null)
+      updateLoadProgress((p) => ({
+        stage: 'done',
+        message: `Loaded ${tabsRef.current.length} tab${tabsRef.current.length === 1 ? '' : 's'}, ${p.columnsTotal} column${p.columnsTotal === 1 ? '' : 's'} with students`,
+      }))
+    }
+  }, [setLoadStatus, updateLoadProgress])
+
+  // Each restored column reports in; shown in the loading pop-up.
+  const columnReporters = useRef<Record<string, (column: { label: string; error: string | null }) => void>>({})
+  const columnReporterFor = (tab: AnalysisTab) => {
+    if (!columnReporters.current[tab.id]) {
+      columnReporters.current[tab.id] = ({ label, error }) => {
+        updateLoadProgress((p) => ({
+          columnsDone: p.columnsDone + 1,
+          message: `Loaded ${tab.name}: ${label} (${p.columnsDone + 1} of ${p.columnsTotal})`,
+          warnings: error ? [...p.warnings, `${tab.name} / ${label}: ${error}`] : p.warnings,
+        }))
+      }
+    }
+    return columnReporters.current[tab.id]
+  }
+
+  // --- Save / load the Trend Analysis configuration ---
+
+  const handleSaveConfig = () => {
+    const { selectedAccountId, courseSearchSettings, trendAnalyses } = useAppStore.getState()
+    downloadTrendConfig(buildTrendConfig(
+      { selectedAccountId, selectedTermIds: courseSearchSettings.selectedTermIds, keywords: courseSearchSettings.keywords },
+      trendAnalyses,
+    ))
+  }
+
+  const handleLoadConfig = async (file: File | undefined) => {
+    if (!file) return
+    if (configInputRef.current) configInputRef.current.value = ''
+    startLoadProgress(`Loading ${file.name}`)
+    try {
+      const session = parseTrendConfig(await file.text())
+      const analyses = session.trend.analyses ?? []
+      updateLoadProgress({
+        message: `Read ${analyses.length} analys${analyses.length === 1 ? 'is' : 'es'}`,
+      })
+      setLoadStatus('Loading search...')
+      setPendingSessionLoad(session)
+    } catch (error) {
+      updateLoadProgress({ error: error instanceof Error ? error.message : 'Unable to read the file' })
+    }
+  }
 
   const handleColumnsChange = useCallback((id: string, columns: TrendColumnSnapshot[]) => {
     columnsRef.current[id] = columns
@@ -275,9 +339,34 @@ export function TrendAnalysisTabs() {
             +
           </button>
         </div>
-        <button className="trend-tabs__download" title="Download all analyses as an HTML snapshot" onClick={handleDownload}>
-          Download Analysis
-        </button>
+        <div className="trend-tabs__actions">
+          <button
+            className="trend-tabs__config"
+            title="Save the course search and every analysis to a JSON file, to rebuild them later"
+            onClick={handleSaveConfig}
+          >
+            Save
+          </button>
+          <button
+            className="trend-tabs__config"
+            title="Load a saved configuration: searches the courses, then rebuilds the analyses"
+            onClick={() => configInputRef.current?.click()}
+          >
+            Load
+          </button>
+          <input
+            ref={configInputRef}
+            className="trend-tabs__config-input"
+            type="file"
+            accept="application/json,.json"
+            aria-label="Trend Analysis configuration file"
+            onChange={(e) => void handleLoadConfig(e.target.files?.[0])}
+          />
+          <button className="trend-tabs__download" title="Download all analyses as an HTML snapshot" onClick={handleDownload}>
+            Download Analysis
+          </button>
+        </div>
+        <LoadProgressModal />
       </div>
       <div className="trend-tabs__content">
         <div className={`trend-tabs__panel${activeId === COMBINED_ID ? ' trend-tabs__panel--active' : ''}`}>
@@ -296,6 +385,7 @@ export function TrendAnalysisTabs() {
               initialCountFilter={tab.initialCountFilter}
               onCountFilterChange={(filter) => handleCountFilterChange(tab.id, filter)}
               onRestored={tab.initialColumns ? handleRestored : undefined}
+              onColumnRestored={columnReporterFor(tab)}
               registerExporter={registerExporterFor(tab.id)}
             />
           </div>

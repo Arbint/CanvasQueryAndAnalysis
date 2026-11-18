@@ -119,6 +119,11 @@ function columnToSnapshot(column: TrendColumn): TrendColumnSnapshot {
   }
 }
 
+/** Whether restoring this column fetches students (predictions and empty course columns don't). */
+export function columnNeedsLoad(column: Pick<TrendColumnSnapshot, 'mode' | 'courseId'>): boolean {
+  return column.mode === 'collection' || (column.mode === 'course' && Boolean(column.courseId))
+}
+
 // --- Prediction settings UI ---
 
 function PredictionSettingsUI({
@@ -346,6 +351,8 @@ interface TrendAnalysisProps {
   onCountFilterChange: (filter: TrendCountFilter) => void
   /** Called once restoring `initialColumns` has finished loading students. */
   onRestored?: () => void
+  /** Called as each restored column finishes loading (for the loading pop-up). */
+  onColumnRestored?: (column: { label: string; error: string | null }) => void
   registerExporter: (exporter: (() => TrendExportData) | null) => void
 }
 
@@ -357,6 +364,7 @@ export function TrendAnalysis({
   initialCountFilter,
   onCountFilterChange,
   onRestored,
+  onColumnRestored,
   registerExporter,
 }: TrendAnalysisProps) {
   const courses = useAppStore((s) => s.courses)
@@ -365,8 +373,7 @@ export function TrendAnalysis({
     if (!initialColumns || initialColumns.length === 0) return [makeColumn(), makeColumn()]
     return initialColumns.map((snapshot) => {
       const column = columnFromSnapshot(snapshot)
-      const needsLoad = column.mode === 'collection' || (column.mode === 'course' && column.courseId)
-      return needsLoad ? { ...column, loading: true } : column
+      return columnNeedsLoad(column) ? { ...column, loading: true } : column
     })
   })
   const [countFilter, setCountFilter] = useState<TrendCountFilter>(initialCountFilter)
@@ -413,8 +420,8 @@ export function TrendAnalysis({
     if (stripRef.current) stripRef.current.scrollLeft = position
   }
 
-  const callbacksRef = useRef({ onColumnsChange, onCountFilterChange, onRestored })
-  callbacksRef.current = { onColumnsChange, onCountFilterChange, onRestored }
+  const callbacksRef = useRef({ onColumnsChange, onCountFilterChange, onRestored, onColumnRestored })
+  callbacksRef.current = { onColumnsChange, onCountFilterChange, onRestored, onColumnRestored }
 
   useEffect(() => {
     callbacksRef.current.onColumnsChange(columns.map(columnToSnapshot))
@@ -433,7 +440,7 @@ export function TrendAnalysis({
     const restoreTrend = async () => {
       // The columns created on mount from initialColumns, keeping their ids.
       const restored = columns.map((column) => ({ ...column, loading: false }))
-      const loaded = await Promise.all(restored.map(async (column) => {
+      const loadColumn = async (column: TrendColumn): Promise<TrendColumn> => {
         if (column.mode === 'course' && column.courseId) {
           try {
             return { ...column, students: await api.getStudents(column.courseId), loading: false }
@@ -459,6 +466,13 @@ export function TrendAnalysis({
         }
 
         return column
+      }
+      const loaded = await Promise.all(restored.map(async (column) => {
+        if (!columnNeedsLoad(column)) return column
+        const result = await loadColumn(column)
+        const course = courses.find((c) => c.id === result.courseId) ?? null
+        callbacksRef.current.onColumnRestored?.({ label: columnName(result, course), error: result.error })
+        return result
       }))
       if (loaded.length > 0) setColumns(loaded)
       callbacksRef.current.onRestored?.()

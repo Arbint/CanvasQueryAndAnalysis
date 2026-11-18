@@ -34,6 +34,7 @@ export function CourseSearch() {
     setPendingGraphSnapshot,
     setPendingTrendAnalyses,
     setLoadStatus,
+    updateLoadProgress,
   } = useAppStore()
   const [terms, setTerms] = useState<Term[]>([])
   const [selectedTermIds, setSelectedTermIds] = useState<string[]>(courseSearchSettings.selectedTermIds)
@@ -155,6 +156,8 @@ export function CourseSearch() {
     const loadSession = async () => {
       const { courseSearch, graph } = pendingSessionLoad
       const trendAnalyses = sessionTrendAnalyses(pendingSessionLoad)
+      // A Trend Analysis configuration has no graph: leave the current one alone.
+      const restoreGraph = () => { if (graph) setPendingGraphSnapshot(graph) }
       restoringSessionRef.current = true
       setLoadStatus('Loading search...')
       setError(null)
@@ -164,7 +167,8 @@ export function CourseSearch() {
       setCourses([])
 
       if (!courseSearch.selectedAccountId) {
-        setPendingGraphSnapshot(graph)
+        updateLoadProgress({ stage: 'courses', message: 'No account saved: skipping the course search' })
+        restoreGraph()
         setPendingTrendAnalyses(trendAnalyses)
         setPendingSessionLoad(null)
         setLoadStatus(null)
@@ -173,22 +177,32 @@ export function CourseSearch() {
       }
 
       setLoading(true)
+      const termCount = courseSearch.selectedTermIds.length
+      const keywordCount = courseSearch.keywords.length
+      updateLoadProgress({
+        stage: 'searching',
+        message: `Searching courses: ${termCount ? `${termCount} semester${termCount === 1 ? '' : 's'}` : 'all semesters'}`
+          + (keywordCount ? `, keywords ${courseSearch.keywords.join(', ')}` : ''),
+      })
       try {
         const result = await api.getCourses({
           account_id: courseSearch.selectedAccountId,
           term_ids: courseSearch.selectedTermIds.map(Number),
           keywords: courseSearch.keywords,
         })
+        updateLoadProgress({ stage: 'courses', message: `Populating course list: ${result.length} course${result.length === 1 ? '' : 's'} found` })
         setCourses(result)
         setLoadStatus('Restoring workspace...')
-        setPendingGraphSnapshot(graph)
+        restoreGraph()
         setPendingTrendAnalyses(trendAnalyses)
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Load failed')
+        const message = e instanceof Error ? e.message : 'Load failed'
+        setError(message)
+        updateLoadProgress((p) => ({ warnings: [...p.warnings, `Course search failed: ${message}`] }))
         // Still restore the graph and trend tabs (their students load per
         // course), so a failed course search doesn't lose them — and the
         // auto-save doesn't then overwrite them with an empty workspace.
-        setPendingGraphSnapshot(graph)
+        restoreGraph()
         setPendingTrendAnalyses(trendAnalyses)
         setLoadStatus(null)
       } finally {
@@ -206,6 +220,7 @@ export function CourseSearch() {
     setPendingSessionLoad,
     setPendingTrendAnalyses,
     setSelectedAccountId,
+    updateLoadProgress,
   ])
 
   // Every click selects the course for Course Grade Display; it only adds a graph

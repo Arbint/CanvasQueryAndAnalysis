@@ -678,6 +678,125 @@
   background: var(--color-btn-primary-hover);
 }
 
+.trend-tabs__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.trend-tabs__config {
+  height: 24px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.trend-tabs__config:hover {
+  border-color: var(--color-accent-blue);
+  color: var(--color-text-heading);
+}
+
+.trend-tabs__config-input {
+  display: none;
+}
+
+/* --- Loading pop-up (Trend Analysis configuration) --- */
+
+.load-progress {
+  width: min(460px, 100%);
+}
+
+.load-progress__bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--color-bg-input);
+}
+
+.load-progress__fill {
+  height: 100%;
+  background: var(--color-accent-blue);
+  transition: width 200ms ease;
+}
+
+.load-progress__bar--error .load-progress__fill {
+  background: var(--color-accent-red);
+}
+
+.load-progress__message {
+  min-height: 1.4em;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.load-progress__message--error {
+  color: var(--color-accent-red);
+}
+
+.load-progress__steps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+}
+
+.load-progress__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.load-progress__icon {
+  width: 16px;
+  text-align: center;
+}
+
+.load-progress__step--done {
+  color: var(--color-text-primary);
+}
+
+.load-progress__step--done .load-progress__icon {
+  color: var(--color-accent-green);
+}
+
+.load-progress__step--active {
+  color: var(--color-text-heading);
+  font-weight: 600;
+}
+
+.load-progress__step--active .load-progress__icon {
+  color: var(--color-accent-blue);
+  animation: load-progress-pulse 1s ease-in-out infinite;
+}
+
+.load-progress__step--error {
+  color: var(--color-accent-red);
+}
+
+.load-progress__count {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.load-progress__warnings {
+  margin: 0;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+  border-left: 2px solid var(--color-accent-yellow);
+  background: var(--color-bg-input);
+  color: var(--color-accent-yellow);
+  font-size: var(--font-size-xs);
+}
+
+@keyframes load-progress-pulse {
+  50% { opacity: 0.35; }
+}
+
 .trend-tabs__content {
   position: relative;
   flex: 1 1 auto;
