@@ -136,7 +136,9 @@ interface AppStore {
   setPendingTrendAnalyses: (analyses: TrendAnalysisSnapshot[] | null) => void
 
   pendingSessionLoad: SavedSession | null
-  setPendingSessionLoad: (session: SavedSession | null) => void
+  /** Whether loading `pendingSessionLoad` runs its course search first (file loads do; the launch restore doesn't). */
+  pendingSessionSearch: boolean
+  setPendingSessionLoad: (session: SavedSession | null, options?: { search?: boolean }) => void
   loadStatus: string | null
   setLoadStatus: (status: string | null) => void
 
@@ -187,7 +189,8 @@ export const useAppStore = create<AppStore>()((set) => ({
   setPendingTrendAnalyses: (analyses) => set({ pendingTrendAnalyses: analyses }),
 
   pendingSessionLoad: null,
-  setPendingSessionLoad: (session) => set({ pendingSessionLoad: session }),
+  pendingSessionSearch: true,
+  setPendingSessionLoad: (session, options) => set({ pendingSessionLoad: session, pendingSessionSearch: options?.search ?? true }),
   loadStatus: null,
   setLoadStatus: (status) => set({ loadStatus: status }),
 

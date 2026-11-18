@@ -55,7 +55,9 @@ export function App() {
     const saved = readAutosave()
     if (saved && !isEmptySession(saved)) {
       setLoadStatus('Restoring previous work...')
-      setPendingSessionLoad(saved)
+      // Restore the previous work and search settings, but don't run the course
+      // search on launch: the user presses Search when ready.
+      setPendingSessionLoad(saved, { search: false })
     } else {
       setAutosaveReady(true)
     }

@@ -30,6 +30,7 @@ export function CourseSearch() {
     courseSearchSettings,
     setCourseSearchSettings,
     pendingSessionLoad,
+    pendingSessionSearch,
     setPendingSessionLoad,
     setPendingGraphSnapshot,
     setPendingTrendAnalyses,
@@ -57,11 +58,14 @@ export function CourseSearch() {
 
   // Fetch terms whenever the account changes
   useEffect(() => {
+    // A session restore sets the account and its saved semesters together: keep them.
+    const restoring = restoringSessionRef.current
+    restoringSessionRef.current = false
     if (!selectedAccountId) { setTerms([]); return }
     api.getTerms(selectedAccountId)
       .then(setTerms)
       .catch(() => setTerms([]))
-    if (!restoringSessionRef.current) setSelectedTermIds([])
+    if (!restoring) setSelectedTermIds([])
   }, [selectedAccountId])
 
   useEffect(() => {
@@ -158,7 +162,8 @@ export function CourseSearch() {
       const trendAnalyses = sessionTrendAnalyses(pendingSessionLoad)
       // A Trend Analysis configuration has no graph: leave the current one alone.
       const restoreGraph = () => { if (graph) setPendingGraphSnapshot(graph) }
-      restoringSessionRef.current = true
+      // The account change below must not clear the saved semesters (see the account effect).
+      restoringSessionRef.current = courseSearch.selectedAccountId !== useAppStore.getState().selectedAccountId
       setLoadStatus('Loading search...')
       setError(null)
       setSelectedAccountId(courseSearch.selectedAccountId)
@@ -166,13 +171,21 @@ export function CourseSearch() {
       setKeywords(courseSearch.keywords)
       setCourses([])
 
+      if (!pendingSessionSearch) {
+        // Launch restore: fill in the search settings and rebuild the work, without searching.
+        restoreGraph()
+        setPendingTrendAnalyses(trendAnalyses)
+        setPendingSessionLoad(null)
+        setLoadStatus(null)
+        return
+      }
+
       if (!courseSearch.selectedAccountId) {
         updateLoadProgress({ stage: 'courses', message: 'No account saved: skipping the course search' })
         restoreGraph()
         setPendingTrendAnalyses(trendAnalyses)
         setPendingSessionLoad(null)
         setLoadStatus(null)
-        restoringSessionRef.current = false
         return
       }
 
@@ -208,12 +221,12 @@ export function CourseSearch() {
       } finally {
         setLoading(false)
         setPendingSessionLoad(null)
-        restoringSessionRef.current = false
       }
     }
     void loadSession()
   }, [
     pendingSessionLoad,
+    pendingSessionSearch,
     setCourses,
     setLoadStatus,
     setPendingGraphSnapshot,
