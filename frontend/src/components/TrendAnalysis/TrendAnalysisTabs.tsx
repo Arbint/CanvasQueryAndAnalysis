@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { downloadTrendSnapshot } from '../../lib/trendExport'
-import { ANALYSIS_COLORS, defaultAnalysisColor, filterByEnrollment, type CombinedSeries } from '../../lib/trendData'
+import { ANALYSIS_COLORS, defaultAnalysisColor, seriesColumns, type CombinedSeries } from '../../lib/trendData'
 import { CombinedTrendView } from './CombinedTrendView'
 import { uniqueId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
@@ -178,12 +178,7 @@ export function TrendAnalysisTabs() {
           name: tab.name,
           color: tab.color,
           included: tab.inCombined,
-          columns: data.columns.map((c) => ({
-            axisLabel: c.axisLabel,
-            label: c.label,
-            term: c.axisTerm,
-            count: filterByEnrollment(c.students, data.countFilter).length,
-          })),
+          columns: seriesColumns(data),
         }
       })
     : []

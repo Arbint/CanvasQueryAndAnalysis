@@ -50,6 +50,7 @@ export function cleanTrendColumns(columns: TrendColumnSnapshot[]): TrendColumnSn
     collection: normalizeCollectionFilters(column.collection),
     matchedCourseCount: column.matchedCourseCount,
     width: column.width,
+    ...(column.mode === 'prediction' && column.prediction ? { prediction: { ...column.prediction } } : {}),
   }))
 }
 

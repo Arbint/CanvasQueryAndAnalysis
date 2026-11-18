@@ -19,6 +19,7 @@ function column(number: number, count: number): TrendExportColumn {
   return {
     number,
     mode: 'course',
+    prediction: null,
     label: `Course ${number}`,
     axisLabel: `C${number}`,
     axisTerm: `Term ${number}`,
@@ -74,5 +75,27 @@ describe('buildTrendSnapshotHtml', () => {
     const ticks = Array.from(doc.querySelectorAll('#analysis-1 .variant:not([hidden]) .graph--framed .trend-graph__tick'))
       .map((t) => Number(t.textContent))
     expect(Math.min(...ticks)).toBeGreaterThan(0)
+  })
+})
+
+describe('buildTrendSnapshotHtml with a prediction column', () => {
+  const withPrediction = analysis('Cohort A', '#61afef', [100, 110])
+  withPrediction.data.columns.push({
+    ...column(3, 0),
+    mode: 'prediction',
+    label: 'Next fall',
+    students: [],
+    prediction: { method: 'manual', lastN: 3, manualValue: 130, note: 'New section added' },
+  })
+  const doc = new DOMParser().parseFromString(buildTrendSnapshotHtml([withPrediction]), 'text/html')
+
+  it('renders the prediction card, table row, and a dashed segment', () => {
+    const card = doc.querySelector('#analysis-1 .variant:not([hidden]) .column--prediction')!
+    expect(card.textContent).toContain('130')
+    expect(card.textContent).toContain('New section added')
+    expect(doc.querySelector('#analysis-1 .variant:not([hidden]) tr.row--predicted')!.textContent).toContain('130 (predicted)')
+    const lines = Array.from(doc.querySelectorAll('#analysis-1 .variant:not([hidden]) .graph--default .trend-graph__line'))
+    expect(lines.map((l) => l.classList.contains('line--predicted'))).toEqual([false, true])
+    expect(doc.querySelector('#combined .graph--default .combined__dot.dot--predicted')).not.toBeNull()
   })
 })

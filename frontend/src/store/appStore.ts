@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Edge, Node } from '@xyflow/react'
 import type { Course, Student } from '../api/types'
 import type { CollectionFilterRef } from '../lib/courseCollectionFilter'
+import type { PredictionSettings } from '../lib/trendData'
 
 export interface CourseSearchSettings {
   selectedTermIds: string[]
@@ -22,15 +23,20 @@ export interface TrendCollectionFilters {
   numberPattern?: string
 }
 
+/** Trend column kinds: one course, a course collection, or a projected count. */
+export type TrendColumnMode = 'course' | 'collection' | 'prediction'
+
 export interface TrendColumnSnapshot {
   id: string
-  mode: 'course' | 'collection'
+  mode: TrendColumnMode
   /** Custom column name; optional for sessions saved before labels existed. */
   label?: string
   courseId: number | null
   collection: TrendCollectionFilters
   matchedCourseCount: number
   width: number
+  /** Settings of a 'prediction' column. */
+  prediction?: PredictionSettings
 }
 
 /** Which students a trend analysis counts, by enrollment state. */

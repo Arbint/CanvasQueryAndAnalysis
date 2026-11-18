@@ -38,6 +38,113 @@ export function compareStudents<T extends Student>(previous: T[] | null, current
   }
 }
 
+// --- Predictions (projected columns) ---
+
+export type PredictionMethod = 'average' | 'lastN' | 'manual'
+
+export const predictionMethodLabels: Record<PredictionMethod, string> = {
+  average: 'Total average trend',
+  lastN: 'Last n columns',
+  manual: 'Manual',
+}
+
+export interface PredictionSettings {
+  method: PredictionMethod
+  /** Columns used by 'lastN' (clamped to the columns available). */
+  lastN: number
+  /** Count used by 'manual'. */
+  manualValue: number
+  /** Why the manual value was chosen. */
+  note: string
+}
+
+export function defaultPredictionSettings(): PredictionSettings {
+  return { method: 'average', lastN: 3, manualValue: 0, note: '' }
+}
+
+export interface PredictionResult {
+  count: number
+  /** Average change rate per column (0.05 = +5%); null for manual or too few columns. */
+  rate: number | null
+  /** Columns the rate was computed from. */
+  columnsUsed: number
+  /** One-line explanation of how the count was produced. */
+  basis: string
+}
+
+function percent(rate: number): string {
+  const value = (rate * 100).toFixed(1)
+  return `${rate > 0 ? '+' : ''}${value}%`
+}
+
+/**
+ * Predicts the next count from the counts before it. The average change rate
+ * is the mean of the column-to-column percentage changes (steps from a count
+ * of 0 are skipped), applied to the last count.
+ */
+export function predictNext(previous: number[], settings: PredictionSettings): PredictionResult {
+  if (settings.method === 'manual') {
+    const count = Math.max(0, Math.round(Number(settings.manualValue) || 0))
+    return { count, rate: null, columnsUsed: 0, basis: settings.note.trim() ? `Manual: ${settings.note.trim()}` : 'Manual value' }
+  }
+  if (previous.length < 2) {
+    const count = previous[previous.length - 1] ?? 0
+    return { count, rate: null, columnsUsed: previous.length, basis: 'Needs at least 2 columns before it' }
+  }
+  const n = settings.method === 'lastN'
+    ? Math.min(previous.length, Math.max(2, Math.round(settings.lastN) || 2))
+    : previous.length
+  const window = previous.slice(-n)
+  const rates: number[] = []
+  for (let i = 1; i < window.length; i++) {
+    if (window[i - 1] > 0) rates.push((window[i] - window[i - 1]) / window[i - 1])
+  }
+  const rate = rates.length ? rates.reduce((sum, r) => sum + r, 0) / rates.length : 0
+  const last = window[window.length - 1]
+  const count = Math.max(0, Math.round(last * (1 + rate)))
+  const scope = settings.method === 'lastN' ? `last ${n} columns` : `all ${n} columns`
+  return { count, rate, columnsUsed: n, basis: `Avg change ${percent(rate)} per column over ${scope}` }
+}
+
+/** A column as far as counting goes: its students, or prediction settings. */
+export interface CountableColumn {
+  students: Student[]
+  prediction?: PredictionSettings | null
+}
+
+/**
+ * Count per column under a count filter. A prediction column predicts from
+ * every column before it (earlier predictions included, so several in a row
+ * project further ahead).
+ */
+export function columnCounts(columns: CountableColumn[], filter: TrendCountFilter): {
+  counts: number[]
+  predictions: (PredictionResult | null)[]
+} {
+  const counts: number[] = []
+  const predictions: (PredictionResult | null)[] = []
+  for (const column of columns) {
+    if (column.prediction) {
+      const result = predictNext(counts, column.prediction)
+      counts.push(result.count)
+      predictions.push(result)
+    } else {
+      counts.push(filterByEnrollment(column.students, filter).length)
+      predictions.push(null)
+    }
+  }
+  return { counts, predictions }
+}
+
+/**
+ * Index of the column each column compares its students with: the nearest
+ * real (non-prediction) column before it, or null.
+ */
+export function previousRealIndex(isPrediction: boolean[], index: number): number | null {
+  for (let i = index - 1; i >= 0; i--) if (!isPrediction[i]) return i
+  return null
+}
+
 // --- Graph scales and framing ---
 
 /** Vertical axis of a graph: the value range shown and where grid lines sit. */
@@ -147,6 +254,48 @@ export function layoutTrendGraph(widths: number[], counts: number[], frame?: Fra
   return { width, height, padX, padTop, padBottom, scale, points }
 }
 
+export interface CurveSegment {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  /** Leads to or from a predicted point. */
+  predicted: boolean
+}
+
+/** Line segments between consecutive points; segments touching a predicted point are marked. */
+export function curveSegments(points: { x: number; y: number }[], predicted: boolean[]): CurveSegment[] {
+  const segments: CurveSegment[] = []
+  for (let i = 1; i < points.length; i++) {
+    segments.push({
+      x1: points[i - 1].x,
+      y1: points[i - 1].y,
+      x2: points[i].x,
+      y2: points[i].y,
+      predicted: Boolean(predicted[i] || predicted[i - 1]),
+    })
+  }
+  return segments
+}
+
+/**
+ * Trend summary of a curve's actual (non-predicted) points, so projections
+ * do not count as evidence of the trend. `columnName` gets the original index.
+ */
+export function actualTrendLines(
+  counts: number[],
+  predicted: boolean[],
+  columnName: (index: number) => string,
+): string[] | null {
+  const actual = counts.map((count, index) => ({ count, index })).filter((p) => !predicted[p.index])
+  const summary = summarizeTrend(actual.map((p) => p.count))
+  if (!summary) return null
+  const lines = trendSummaryLines(summary, (i) => columnName(actual[i].index))
+  const projected = predicted.filter(Boolean).length
+  if (projected) lines.push(`Projected: ${projected} prediction column${projected === 1 ? '' : 's'} (dashed)`)
+  return lines
+}
+
 // --- Curve summaries (hover popups) ---
 
 export type TrendDirection = 'growing' | 'declining' | 'stable' | 'single'
@@ -250,6 +399,8 @@ export interface CombinedSeriesColumn {
   label: string
   term: string
   count: number
+  /** A projected count (prediction column), drawn dashed and hollow. */
+  predicted?: boolean
 }
 
 export interface CombinedSeries {
@@ -257,6 +408,21 @@ export interface CombinedSeries {
   name: string
   color: string
   columns: CombinedSeriesColumn[]
+}
+
+/** An analysis's columns as a combined-view series (counts under its own count filter). */
+export function seriesColumns(data: {
+  countFilter: TrendCountFilter
+  columns: (CountableColumn & { axisLabel: string; label: string; axisTerm: string })[]
+}): CombinedSeriesColumn[] {
+  const { counts } = columnCounts(data.columns, data.countFilter)
+  return data.columns.map((c, i) => ({
+    axisLabel: c.axisLabel,
+    label: c.label,
+    term: c.axisTerm,
+    count: counts[i],
+    predicted: Boolean(c.prediction),
+  }))
 }
 
 export interface CurveLabel {

@@ -199,6 +199,90 @@
   border-top: 2px solid var(--color-accent-green);
 }
 
+.trend-column--prediction {
+  border-top: 2px dashed var(--color-accent-yellow);
+}
+
+/* --- Prediction column --- */
+
+.trend-prediction {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.trend-prediction__field {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.trend-prediction__field--stacked {
+  grid-template-columns: 1fr;
+}
+
+.trend-prediction__field select,
+.trend-prediction__field input,
+.trend-prediction__field textarea {
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  padding: 3px var(--space-2);
+}
+
+.trend-prediction__field textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.trend-prediction__hint {
+  grid-column: 2;
+  color: var(--color-accent-yellow);
+}
+
+.trend-prediction__result {
+  padding: var(--space-2);
+  border: 1px dashed var(--color-accent-yellow);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-input);
+  text-align: center;
+}
+
+.trend-prediction__count {
+  color: var(--color-accent-yellow);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.trend-prediction__basis {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+}
+
+/* Projected parts of curves: dashed lines, hollow dots. */
+.trend-graph__line--predicted {
+  stroke-dasharray: 6 5;
+}
+
+.trend-graph__dot--predicted,
+.trend-graph__dot--predicted:hover {
+  fill: var(--color-bg-base);
+  stroke: var(--color-accent-yellow);
+}
+
+.trend-combined__dot--predicted {
+  fill: var(--color-bg-base);
+  stroke: currentColor;
+}
+
+.trend-tooltip__note {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+}
+
 .trend-column__header {
   display: flex;
   align-items: center;

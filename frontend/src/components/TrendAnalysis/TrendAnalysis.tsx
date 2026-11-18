@@ -13,18 +13,25 @@ import {
   type CourseCollectionFilters,
 } from '../../lib/courseCollectionFilter'
 import { CourseCollectionFilterPanel } from '../shared/CourseCollectionFilterPanel'
-import type { TrendColumnSnapshot, TrendCountFilter } from '../../store/appStore'
+import type { TrendColumnMode, TrendColumnSnapshot, TrendCountFilter } from '../../store/appStore'
 import {
+  actualTrendLines,
+  columnCounts,
   compareStudents,
   countFilterLabels,
   countFilters,
+  curveSegments,
+  defaultPredictionSettings,
   filterByEnrollment,
   formatTick,
   layoutTrendGraph,
+  predictionMethodLabels,
+  previousRealIndex,
   scaleY,
-  summarizeTrend,
-  trendSummaryLines,
   type Comparison,
+  type PredictionMethod,
+  type PredictionResult,
+  type PredictionSettings,
 } from '../../lib/trendData'
 import { useElementSize } from '../../lib/useElementSize'
 import { CurvePopup, type CurveHover } from './CurvePopup'
@@ -41,7 +48,9 @@ function collectionCourses(courses: Course[], filters: CourseCollectionFilters):
 
 interface TrendColumn {
   id: string
-  mode: 'course' | 'collection'
+  mode: TrendColumnMode
+  /** Used by 'prediction' columns; kept when switching modes so it isn't lost. */
+  prediction: PredictionSettings
   /** User-defined name; empty means use the automatic label. */
   label: string
   courseId: number | null
@@ -66,6 +75,7 @@ const nextColumnId = () => uniqueId('trend-column')
 const makeColumn = (): TrendColumn => ({
   id: nextColumnId(),
   mode: 'course',
+  prediction: defaultPredictionSettings(),
   label: '',
   courseId: null,
   collection: emptyCourseCollectionFilters(),
@@ -84,6 +94,7 @@ function columnFromSnapshot(snapshot: TrendColumnSnapshot): TrendColumn {
   return {
     id: nextColumnId(),
     mode: snapshot.mode,
+    prediction: { ...defaultPredictionSettings(), ...snapshot.prediction },
     label: snapshot.label ?? '',
     courseId: snapshot.courseId,
     collection: normalizeCollectionFilters(snapshot.collection),
@@ -104,7 +115,86 @@ function columnToSnapshot(column: TrendColumn): TrendColumnSnapshot {
     collection: column.collection,
     matchedCourseCount: column.matchedCourseCount,
     width: column.width,
+    ...(column.mode === 'prediction' ? { prediction: column.prediction } : {}),
   }
+}
+
+// --- Prediction settings UI ---
+
+function PredictionSettingsUI({
+  settings,
+  onChange,
+  result,
+  availableColumns,
+}: {
+  settings: PredictionSettings
+  onChange: (settings: PredictionSettings) => void
+  result: PredictionResult | null
+  /** Columns before this one (what the automatic methods can use). */
+  availableColumns: number
+}) {
+  const stopDoubleClick = (e: { stopPropagation: () => void }) => e.stopPropagation()
+  return (
+    <div className="trend-prediction" onDoubleClick={stopDoubleClick}>
+      <label className="trend-prediction__field">
+        <span>Method</span>
+        <select
+          value={settings.method}
+          onChange={(e) => onChange({ ...settings, method: e.target.value as PredictionMethod })}
+        >
+          {(Object.keys(predictionMethodLabels) as PredictionMethod[]).map((method) => (
+            <option key={method} value={method}>{predictionMethodLabels[method]}</option>
+          ))}
+        </select>
+      </label>
+
+      {settings.method === 'lastN' && (
+        <label className="trend-prediction__field">
+          <span>n (columns)</span>
+          <input
+            type="number"
+            min={2}
+            max={Math.max(2, availableColumns)}
+            value={settings.lastN}
+            onChange={(e) => onChange({ ...settings, lastN: Number(e.target.value) })}
+          />
+          {result && settings.lastN !== result.columnsUsed && availableColumns >= 2 && (
+            <span className="trend-prediction__hint">Using {result.columnsUsed} (columns available)</span>
+          )}
+        </label>
+      )}
+
+      {settings.method === 'manual' && (
+        <>
+          <label className="trend-prediction__field">
+            <span>Students</span>
+            <input
+              type="number"
+              min={0}
+              value={settings.manualValue}
+              onChange={(e) => onChange({ ...settings, manualValue: Number(e.target.value) })}
+            />
+          </label>
+          <label className="trend-prediction__field trend-prediction__field--stacked">
+            <span>Note</span>
+            <textarea
+              rows={3}
+              placeholder="Why this number? e.g. two sections added next fall"
+              value={settings.note}
+              onChange={(e) => onChange({ ...settings, note: e.target.value })}
+            />
+          </label>
+        </>
+      )}
+
+      {result && (
+        <div className="trend-prediction__result">
+          <div className="trend-prediction__count">{result.count}</div>
+          <div className="trend-prediction__basis">{result.basis}</div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // --- Collection filters UI ---
@@ -186,6 +276,7 @@ function truncate(value: string, max = 24): string {
 
 /** Label generated from the column's course or collection filters. */
 function autoLabel(column: TrendColumn, course: Course | null): string {
+  if (column.mode === 'prediction') return 'Prediction'
   if (column.mode === 'collection') {
     const { department, selectedTerms } = column.collection
     const filterName = resolveCollectionFilters(column.collection, useFilterLibrary.getState().filters).filter?.name
@@ -210,6 +301,7 @@ function axisLabel(column: TrendColumn, course: Course | null): string {
 }
 
 function axisTermLabel(column: TrendColumn, course: Course | null): string {
+  if (column.mode === 'prediction') return `Predicted (${predictionMethodLabels[column.prediction.method].toLowerCase()})`
   if (column.mode === 'collection') {
     return `${column.matchedCourseCount} course${column.matchedCourseCount !== 1 ? 's' : ''}`
   }
@@ -225,7 +317,9 @@ export interface TrendExportStudent extends Student {
 
 export interface TrendExportColumn {
   number: number
-  mode: 'course' | 'collection'
+  mode: TrendColumnMode
+  /** Settings of a prediction column (its count is predicted per count filter); null otherwise. */
+  prediction: PredictionSettings | null
   label: string
   axisLabel: string
   axisTerm: string
@@ -378,14 +472,25 @@ export function TrendAnalysis({
     () => columns.map((col) => filterByEnrollment(col.students, countFilter)),
     [columns, countFilter],
   )
-  const comparisons = visibleStudents.map((students, i) =>
-    compareStudents(i > 0 ? visibleStudents[i - 1] : null, students),
+  const isPrediction = columns.map((col) => col.mode === 'prediction')
+  // Counts per column; prediction columns project from the columns before them.
+  const { counts, predictions } = useMemo(
+    () => columnCounts(
+      columns.map((col) => ({ students: col.students, prediction: col.mode === 'prediction' ? col.prediction : null })),
+      countFilter,
+    ),
+    [columns, countFilter],
   )
+  // Each real column compares with the nearest real column before it (predictions have no students).
+  const comparisons = visibleStudents.map((students, i) => {
+    const previous = previousRealIndex(isPrediction, i)
+    return compareStudents(previous === null ? null : visibleStudents[previous], students)
+  })
 
   const frame = framed && graphViewportSize.width > 0 && graphViewportSize.height > 0 ? graphViewportSize : undefined
   const graph = useMemo(
-    () => layoutTrendGraph(columns.map((col) => col.width), visibleStudents.map((students) => students.length), frame),
-    [columns, visibleStudents, frame],
+    () => layoutTrendGraph(columns.map((col) => col.width), counts, frame),
+    [columns, counts, frame],
   )
   const plotHeight = graph.height - graph.padTop - graph.padBottom
   const zoomBy = (delta: number) => {
@@ -419,7 +524,11 @@ export function TrendAnalysis({
     }
   }
 
-  const setColumnMode = (columnId: string, mode: 'course' | 'collection') => {
+  const setColumnPrediction = (columnId: string, prediction: PredictionSettings) => {
+    setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, prediction } : col))
+  }
+
+  const setColumnMode = (columnId: string, mode: TrendColumnMode) => {
     setColumns((curr) =>
       curr.map((col) =>
         col.id === columnId
@@ -534,6 +643,7 @@ export function TrendAnalysis({
       return {
         number: index + 1,
         mode: column.mode,
+        prediction: column.mode === 'prediction' ? { ...column.prediction } : null,
         label: columnName(column, course),
         axisLabel: axisLabel(column, course),
         axisTerm: axisTermLabel(column, course),
@@ -557,8 +667,12 @@ export function TrendAnalysis({
 
   const activeMenu = menu ? comparisons[menu.index] : null
   const hoveredComparison = hoveredIndex === null ? null : comparisons[hoveredIndex]
-  const curveSummary = hoveredCurve ? summarizeTrend(graph.points.map((p) => p.count)) : null
+  const hoveredPrediction = hoveredIndex === null ? null : predictions[hoveredIndex]
+  const curveLines = hoveredCurve
+    ? actualTrendLines(counts, isPrediction, (i) => `column ${i + 1} (${axisLabel(columns[i], selectedCourses[i])})`)
+    : null
   const curvePoints = graph.points.map((p) => `${p.x},${p.y}`).join(' ')
+  const segments = curveSegments(graph.points, isPrediction)
 
   return (
     <div className="trend-analysis" onClick={() => setMenu(null)}>
@@ -633,7 +747,16 @@ export function TrendAnalysis({
             ))}
             {graph.points.length > 1 && (
               <g className={`trend-curve${hoveredCurve ? ' trend-curve--highlight' : ''}`}>
-                <polyline className="trend-graph__line" points={curvePoints} />
+                {segments.map((s, i) => (
+                  <line
+                    key={i}
+                    className={`trend-graph__line${s.predicted ? ' trend-graph__line--predicted' : ''}`}
+                    x1={s.x1}
+                    y1={s.y1}
+                    x2={s.x2}
+                    y2={s.y2}
+                  />
+                ))}
                 <polyline
                   className="trend-curve__hit"
                   points={curvePoints}
@@ -645,7 +768,7 @@ export function TrendAnalysis({
             {graph.points.map((point, index) => (
               <g key={columns[index].id}>
                 <circle
-                  className="trend-graph__dot"
+                  className={`trend-graph__dot${isPrediction[index] ? ' trend-graph__dot--predicted' : ''}`}
                   cx={point.x}
                   cy={point.y}
                   r={6}
@@ -654,7 +777,8 @@ export function TrendAnalysis({
                   onContextMenu={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    setMenu({ index, x: e.clientX, y: e.clientY })
+                    // Predictions have no students to download or copy.
+                    if (!isPrediction[index]) setMenu({ index, x: e.clientX, y: e.clientY })
                   }}
                 />
                 <text className="trend-graph__count" x={point.x} y={point.y - 12} textAnchor="middle">
@@ -670,7 +794,17 @@ export function TrendAnalysis({
               </g>
             ))}
           </svg>
-          {hoveredIndex !== null && hoveredComparison && (
+          {hoveredIndex !== null && hoveredPrediction && (
+            <div className="trend-tooltip">
+              <div className="trend-tooltip__title">
+                {columnName(columns[hoveredIndex], selectedCourses[hoveredIndex])}
+              </div>
+              <div>Predicted: {hoveredPrediction.count}</div>
+              <div>Method: {predictionMethodLabels[columns[hoveredIndex].prediction.method]}</div>
+              <div className="trend-tooltip__note">{hoveredPrediction.basis}</div>
+            </div>
+          )}
+          {hoveredIndex !== null && !hoveredPrediction && hoveredComparison && (
             <div className="trend-tooltip">
               <div className="trend-tooltip__title">
                 {columnName(columns[hoveredIndex], selectedCourses[hoveredIndex])}
@@ -680,15 +814,8 @@ export function TrendAnalysis({
               <div>New: {hoveredComparison.added.length}</div>
             </div>
           )}
-          {hoveredCurve && hoveredIndex === null && curveSummary && (
-            <CurvePopup
-              at={hoveredCurve}
-              title="Trend"
-              lines={trendSummaryLines(
-                curveSummary,
-                (i) => `column ${i + 1} (${axisLabel(columns[i], selectedCourses[i])})`,
-              )}
-            />
+          {hoveredCurve && hoveredIndex === null && curveLines && (
+            <CurvePopup at={hoveredCurve} title="Trend" lines={curveLines} />
           )}
         </div>
       </section>
@@ -712,10 +839,12 @@ export function TrendAnalysis({
             const course = selectedCourses[index]
             return (
               <article
-                className={`trend-column${column.mode === 'collection' ? ' trend-column--collection' : ''}`}
+                className={`trend-column trend-column--${column.mode}`}
                 key={column.id}
                 style={{ width: column.width, minWidth: column.width }}
-                onDoubleClick={() => setActiveStudentList(visibleStudents[index])}
+                onDoubleClick={() => {
+                  if (column.mode !== 'prediction') setActiveStudentList(visibleStudents[index])
+                }}
               >
                 <div className="trend-column__header">
                   <span className="trend-column__number">{index + 1}</span>
@@ -732,6 +861,13 @@ export function TrendAnalysis({
                     >
                       Collection
                     </button>
+                    <button
+                      className={`trend-column__tab${column.mode === 'prediction' ? ' trend-column__tab--active' : ''}`}
+                      title="Project the next count from the columns before this one"
+                      onClick={() => setColumnMode(column.id, 'prediction')}
+                    >
+                      Prediction
+                    </button>
                   </div>
                   <button className="trend-column__remove" title="Remove column" onClick={() => removeColumn(column.id)}>
                     x
@@ -740,15 +876,22 @@ export function TrendAnalysis({
 
                 <input
                   className="trend-column__label-input"
-                  aria-label="Column label"
+                  aria-label={column.mode === 'prediction' ? 'Prediction name' : 'Column label'}
                   title="Custom label shown on the graph (leave empty for the automatic label)"
-                  placeholder={`Label: ${autoLabel(column, course)}`}
+                  placeholder={column.mode === 'prediction' ? 'Name: Prediction' : `Label: ${autoLabel(column, course)}`}
                   value={column.label}
                   onChange={(e) => setColumnLabel(column.id, e.target.value)}
                   onDoubleClick={(e) => e.stopPropagation()}
                 />
 
-                {column.mode === 'course' ? (
+                {column.mode === 'prediction' ? (
+                  <PredictionSettingsUI
+                    settings={column.prediction}
+                    onChange={(settings) => setColumnPrediction(column.id, settings)}
+                    result={predictions[index]}
+                    availableColumns={index}
+                  />
+                ) : column.mode === 'course' ? (
                   <CourseSelect
                     courses={courses}
                     value={column.courseId}
@@ -763,6 +906,8 @@ export function TrendAnalysis({
                   />
                 )}
 
+                {/* Predictions have no students: their count and basis show in the settings above. */}
+                {column.mode !== 'prediction' && (<>
                 <div className="trend-column__meta">
                   <div>
                     <span>Students</span>
@@ -797,6 +942,7 @@ export function TrendAnalysis({
                     </li>
                   ))}
                 </ul>
+                </>)}
 
                 <div
                   className="trend-column__resize"

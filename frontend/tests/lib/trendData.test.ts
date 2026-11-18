@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
+  actualTrendLines,
+  columnCounts,
+  defaultPredictionSettings,
   framedScale,
   layoutCombinedGraph,
   layoutTrendGraph,
+  predictNext,
+  previousRealIndex,
   summarizeTrend,
   trendSummaryLines,
   zeroBasedScale,
   type CombinedSeries,
+  type PredictionSettings,
 } from '../../src/lib/trendData'
 
 describe('scales', () => {
@@ -86,5 +92,57 @@ describe('layoutCombinedGraph curve labels', () => {
     expect(Math.abs(a.y - b.y)).toBeGreaterThanOrEqual(14)
     // Room is left for the label right of the last slot.
     expect(g.width).toBeGreaterThan(a.x + 'Alpha'.length * 6)
+  })
+})
+
+describe('predictions', () => {
+  const settings = (over: Partial<PredictionSettings> = {}): PredictionSettings => ({ ...defaultPredictionSettings(), ...over })
+
+  it('total average trend applies the mean column-to-column change rate to the last count', () => {
+    // +10%, then -50% -> average -20%; 55 * 0.8 = 44
+    const r = predictNext([100, 110, 55], settings())
+    expect(r.rate).toBeCloseTo(-0.2)
+    expect(r.count).toBe(44)
+    expect(r.columnsUsed).toBe(3)
+  })
+
+  it('last n columns uses only the last n, clamping n to the columns available', () => {
+    const lastTwo = predictNext([100, 50, 60], settings({ method: 'lastN', lastN: 2 }))
+    expect(lastTwo.rate).toBeCloseTo(0.2)
+    expect(lastTwo.count).toBe(72)
+    const tooMany = predictNext([100, 50, 60], settings({ method: 'lastN', lastN: 10 }))
+    expect(tooMany.columnsUsed).toBe(3)
+    expect(tooMany.count).toBe(predictNext([100, 50, 60], settings()).count)
+  })
+
+  it('manual uses the given value and note', () => {
+    const r = predictNext([1, 2, 3], settings({ method: 'manual', manualValue: 75, note: 'Two new sections' }))
+    expect(r.count).toBe(75)
+    expect(r.rate).toBeNull()
+    expect(r.basis).toContain('Two new sections')
+  })
+
+  it('needs two columns to compute a rate, and skips steps from 0', () => {
+    expect(predictNext([40], settings()).basis).toMatch(/at least 2/)
+    expect(predictNext([0, 10, 20], settings()).rate).toBeCloseTo(1)
+  })
+
+  it('columnCounts chains predictions and previousRealIndex skips them', () => {
+    const student = (id: number) => ({ id, first_name: '', last_name: '', ssid: '', login_id: '', email: '', enrollment_state: 'active' as const })
+    const students = (n: number) => Array.from({ length: n }, (_, i) => student(i))
+    const { counts, predictions } = columnCounts(
+      [{ students: students(100) }, { students: students(110) }, { students: [], prediction: settings() }, { students: [], prediction: settings() }],
+      'all',
+    )
+    expect(counts).toEqual([100, 110, 121, 133])
+    expect(predictions.map((p) => p !== null)).toEqual([false, false, true, true])
+    expect(previousRealIndex([false, true, false], 2)).toBe(0)
+    expect(previousRealIndex([true, false], 1)).toBeNull()
+  })
+
+  it('actualTrendLines ignores predicted points', () => {
+    const lines = actualTrendLines([100, 90, 200], [false, false, true], (i) => `c${i + 1}`)!
+    expect(lines[0]).toBe('Trend: Declining')
+    expect(lines).toContain('Projected: 1 prediction column (dashed)')
   })
 })

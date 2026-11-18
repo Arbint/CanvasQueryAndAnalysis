@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
+  actualTrendLines,
+  curveSegments,
   formatTick,
   layoutCombinedGraph,
   scaleY,
-  summarizeTrend,
-  trendSummaryLines,
   type CombinedSeries,
 } from '../../lib/trendData'
 import { useElementSize } from '../../lib/useElementSize'
@@ -34,7 +34,13 @@ export function CombinedTrendView({ series, onToggle }: CombinedTrendViewProps) 
   const hoveredColumn = hovered && hoveredSeries ? hoveredSeries.columns[hovered.column] : null
   const highlighted = hoveredCurve?.series ?? hovered?.series ?? null
   const curveSeries = hoveredCurve ? visible[hoveredCurve.series] : null
-  const curveSummary = curveSeries ? summarizeTrend(curveSeries.columns.map((c) => c.count)) : null
+  const curveLines = curveSeries
+    ? actualTrendLines(
+        curveSeries.columns.map((c) => c.count),
+        curveSeries.columns.map((c) => Boolean(c.predicted)),
+        (i) => `column ${i + 1} (${curveSeries.columns[i].axisLabel})`,
+      )
+    : null
   // Draw the highlighted curve last so it sits on top of the others.
   const drawOrder = visible.map((_, i) => i)
   if (highlighted !== null) drawOrder.push(...drawOrder.splice(highlighted, 1))
@@ -128,7 +134,16 @@ export function CombinedTrendView({ series, onToggle }: CombinedTrendViewProps) 
               const polyline = points.map((p) => `${p.x},${p.y}`).join(' ')
               return (
                 <g key={s.id} className={`trend-curve${state}`} style={{ color: s.color }}>
-                  {points.length > 1 && <polyline className="trend-combined__line" points={polyline} />}
+                  {curveSegments(points, s.columns.map((c) => Boolean(c.predicted))).map((seg, i) => (
+                    <line
+                      key={i}
+                      className={`trend-combined__line${seg.predicted ? ' trend-graph__line--predicted' : ''}`}
+                      x1={seg.x1}
+                      y1={seg.y1}
+                      x2={seg.x2}
+                      y2={seg.y2}
+                    />
+                  ))}
                   {points.length > 1 && (
                     <polyline
                       className="trend-curve__hit"
@@ -151,7 +166,7 @@ export function CombinedTrendView({ series, onToggle }: CombinedTrendViewProps) 
                   {points.map((p, ci) => (
                     <g key={ci}>
                       <circle
-                        className="trend-combined__dot"
+                        className={`trend-combined__dot${s.columns[ci].predicted ? ' trend-combined__dot--predicted' : ''}`}
                         cx={p.x}
                         cy={p.y}
                         r={5}
@@ -180,17 +195,12 @@ export function CombinedTrendView({ series, onToggle }: CombinedTrendViewProps) 
             <div className="trend-tooltip__title" style={{ color: hoveredSeries.color }}>{hoveredSeries.name}</div>
             <div>Column {hovered!.column + 1}: {hoveredColumn.label}</div>
             {hoveredColumn.term && <div>{hoveredColumn.term}</div>}
-            <div>Students: {hoveredColumn.count}</div>
+            <div>{hoveredColumn.predicted ? 'Predicted' : 'Students'}: {hoveredColumn.count}</div>
           </div>
         )}
       </div>
-      {hoveredCurve && curveSeries && curveSummary && !hovered && (
-        <CurvePopup
-          at={hoveredCurve}
-          title={curveSeries.name}
-          color={curveSeries.color}
-          lines={trendSummaryLines(curveSummary, (i) => `column ${i + 1} (${curveSeries.columns[i].axisLabel})`)}
-        />
+      {hoveredCurve && curveSeries && curveLines && !hovered && (
+        <CurvePopup at={hoveredCurve} title={curveSeries.name} color={curveSeries.color} lines={curveLines} />
       )}
     </div>
   )

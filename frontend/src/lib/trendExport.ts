@@ -2,19 +2,24 @@ import type { Student } from '../api/types'
 import type { TrendExportColumn, TrendExportData, TrendExportStudent } from '../components/TrendAnalysis/TrendAnalysis'
 import type { TrendCountFilter } from '../store/appStore'
 import {
+  actualTrendLines,
+  columnCounts,
   compareStudents,
   countFilterLabels,
   countFilters,
+  curveSegments,
   filterByEnrollment,
   formatTick,
   layoutCombinedGraph,
   layoutTrendGraph,
+  predictionMethodLabels,
+  previousRealIndex,
   scaleY,
-  summarizeTrend,
-  trendSummaryLines,
+  seriesColumns,
   type CombinedSeries,
-  type FrameSize,
   type Comparison,
+  type FrameSize,
+  type PredictionResult,
 } from './trendData'
 
 export interface TrendExportAnalysis {
@@ -97,6 +102,13 @@ summary { cursor: pointer; color: var(--text); }
 .combined__dot { fill: currentColor; stroke: var(--bg-base); stroke-width: 2; }
 .combined__count { fill: currentColor; font-size: 11px; }
 .combined__x-label { fill: currentColor; font-size: 11px; font-weight: 600; }
+.line--predicted { stroke-dasharray: 6 5; }
+.dot--predicted { fill: var(--bg-base) !important; stroke: currentColor; stroke-width: 2; }
+.trend-graph__dot.dot--predicted { stroke: var(--blue); }
+.column--prediction { border-top: 2px dashed var(--yellow); }
+.column__basis { color: var(--text); font-size: 12px; }
+.column__note { margin-top: 6px; padding: 6px 8px; border-left: 2px solid var(--yellow); background: var(--bg-input); color: var(--text); font-size: 12px; white-space: pre-wrap; }
+tr.row--predicted td { font-style: italic; color: var(--muted); }
 .curve-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: help; }
 .combined__label { fill: currentColor; font-size: 12px; font-weight: 700; paint-order: stroke; stroke: var(--bg-base); stroke-width: 3px; cursor: help; }
 g[data-series] { transition: opacity 120ms ease; }
@@ -126,18 +138,30 @@ function studentListHtml(students: Student[]) {
 interface FilteredColumn {
   column: TrendExportColumn
   students: TrendExportStudent[]
+  /** Students counted, or the predicted count for a prediction column. */
+  count: number
+  /** Set for prediction columns. */
+  prediction: PredictionResult | null
   comparison: Comparison<TrendExportStudent>
   hasPrevious: boolean
 }
 
 function filterColumns(columns: TrendExportColumn[], filter: TrendCountFilter): FilteredColumn[] {
   const lists = columns.map((c) => filterByEnrollment(c.students, filter))
-  return columns.map((column, i) => ({
-    column,
-    students: lists[i],
-    comparison: compareStudents(i > 0 ? lists[i - 1] : null, lists[i]),
-    hasPrevious: i > 0,
-  }))
+  const { counts, predictions } = columnCounts(columns, filter)
+  const isPrediction = columns.map((c) => Boolean(c.prediction))
+  return columns.map((column, i) => {
+    // Compare with the nearest real column before it; predictions have no students.
+    const previous = previousRealIndex(isPrediction, i)
+    return {
+      column,
+      students: lists[i],
+      count: counts[i],
+      prediction: predictions[i],
+      comparison: compareStudents(previous === null ? null : lists[previous], lists[i]),
+      hasPrevious: previous !== null && !isPrediction[i],
+    }
+  })
 }
 
 /**
@@ -146,19 +170,26 @@ function filterColumns(columns: TrendExportColumn[], filter: TrendCountFilter): 
  */
 const EXPORT_FRAME: FrameSize = { width: 1200, height: 420 }
 
-/** Hover popup text for a curve: name, then the trend summary lines. */
-function curveTip(name: string, counts: number[], axisLabels: string[]): string {
-  const summary = summarizeTrend(counts)
-  if (!summary) return name
-  return [name, ...trendSummaryLines(summary, (i) => `column ${i + 1} (${axisLabels[i]})`)].join('\n')
+/** Hover popup text for a curve: name, then the trend summary of its actual columns. */
+function curveTip(name: string, counts: number[], predicted: boolean[], axisLabels: string[]): string {
+  const lines = actualTrendLines(counts, predicted, (i) => `column ${i + 1} (${axisLabels[i]})`)
+  return lines ? [name, ...lines].join('\n') : name
+}
+
+/** Curve drawn as segments, dashed where they lead to or from a predicted point. */
+function segmentsSvg(points: { x: number; y: number }[], predicted: boolean[], className: string): string {
+  return curveSegments(points, predicted)
+    .map((s) => `<line class="${className}${s.predicted ? ' line--predicted' : ''}" x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}"/>`)
+    .join('')
 }
 
 function graphSvg(filtered: FilteredColumn[], frame?: FrameSize) {
   const g = layoutTrendGraph(
     filtered.map((f) => f.column.width),
-    filtered.map((f) => f.students.length),
+    filtered.map((f) => f.count),
     frame,
   )
+  const predicted = filtered.map((f) => Boolean(f.prediction))
   const bottom = g.height - g.padBottom
   const ticks = g.scale.ticks.map((tick) => {
     const y = scaleY(g.scale, tick, g.padTop, g.height - g.padTop - g.padBottom)
@@ -169,14 +200,15 @@ function graphSvg(filtered: FilteredColumn[], frame?: FrameSize) {
     `<line class="trend-graph__column-line" x1="${p.x}" y1="${g.padTop}" x2="${p.x}" y2="${bottom}"/>`,
   ).join('')
   const polyline = g.points.map((p) => `${p.x},${p.y}`).join(' ')
-  const tip = curveTip('Trend', g.points.map((p) => p.count), filtered.map((f) => f.column.axisLabel))
+  const tip = curveTip('Trend', g.points.map((p) => p.count), predicted, filtered.map((f) => f.column.axisLabel))
   const line = g.points.length > 1
-    ? `<g class="trend-curve"><polyline class="trend-graph__line" points="${polyline}"/>
+    ? `<g class="trend-curve">${segmentsSvg(g.points, predicted, 'trend-graph__line')}
         <polyline class="curve-hit" points="${polyline}" data-tip="${esc(tip)}"/></g>`
     : ''
   const points = g.points.map((p, i) => {
-    const c = filtered[i].column
-    return `<circle class="trend-graph__dot" cx="${p.x}" cy="${p.y}" r="6"><title>${esc(`${c.label}: ${p.count} students`)}</title></circle>
+    const { column: c, prediction } = filtered[i]
+    const title = prediction ? `${c.label}: ${p.count} predicted - ${prediction.basis}` : `${c.label}: ${p.count} students`
+    return `<circle class="trend-graph__dot${prediction ? ' dot--predicted' : ''}" cx="${p.x}" cy="${p.y}" r="6"><title>${esc(title)}</title></circle>
       <text class="trend-graph__count" x="${p.x}" y="${p.y - 12}" text-anchor="middle">${p.count}</text>
       <text class="trend-graph__x-label" x="${p.x}" y="${g.height - 54}" text-anchor="middle">${esc(c.axisLabel)}</text>
       <text class="trend-graph__x-term" x="${p.x}" y="${g.height - 36}" text-anchor="middle">${esc(c.axisTerm)}</text>`
@@ -195,7 +227,24 @@ const GRAPH_TOOLS_HTML = `<div class="graph-tools">
   <span>Hover a curve for its trend</span>
 </div>`
 
-function columnCardHtml({ column, students: list, comparison, hasPrevious }: FilteredColumn) {
+function predictionCardHtml(column: TrendExportColumn, prediction: PredictionResult) {
+  const method = column.prediction ? predictionMethodLabels[column.prediction.method] : ''
+  const note = column.prediction?.method === 'manual' && column.prediction.note.trim()
+    ? `<div class="column__note">${esc(column.prediction.note.trim())}</div>`
+    : ''
+  return `<div class="column column--prediction">
+    <div class="column__head"><span class="column__number">${column.number}</span><span class="column__title">${esc(column.label)}</span></div>
+    <div class="column__meta">
+      <div><span>Predicted</span><strong>${prediction.count}</strong></div>
+      <div><span>Method</span><strong>${esc(method)}</strong></div>
+    </div>
+    <div class="column__basis">${esc(prediction.basis)}</div>
+    ${note}
+  </div>`
+}
+
+function columnCardHtml({ column, students: list, comparison, hasPrevious, prediction }: FilteredColumn) {
+  if (prediction) return predictionCardHtml(column, prediction)
   const meta =
     column.mode === 'collection'
       ? `<div><span>Courses</span><strong>${column.matchedCourseCount}</strong></div>`
@@ -222,11 +271,11 @@ function columnCardHtml({ column, students: list, comparison, hasPrevious }: Fil
 function summaryTableHtml(filtered: FilteredColumn[]) {
   const rows = filtered
     .map(
-      ({ column: c, students, comparison, hasPrevious }) => `<tr>
+      ({ column: c, count, prediction, comparison, hasPrevious }) => `<tr${prediction ? ' class="row--predicted"' : ''}>
         <td>${c.number}</td>
         <td>${esc(c.label)}</td>
-        <td>${esc(c.mode === 'collection' ? `Collection (${c.term})` : c.term || '—')}</td>
-        <td class="num">${students.length}</td>
+        <td>${esc(prediction ? 'Prediction' : c.mode === 'collection' ? `Collection (${c.term})` : c.term || '—')}</td>
+        <td class="num">${prediction ? `${count} (predicted)` : count}</td>
         <td class="num">${hasPrevious ? comparison.retained.length : '—'}</td>
         <td class="num lost">${hasPrevious ? comparison.lost.length : '—'}</td>
         <td class="num added">${hasPrevious ? comparison.added.length : '—'}</td>
@@ -244,19 +293,10 @@ function combinedSeries(analyses: TrendExportAnalysis[]): CombinedSeries[] {
     id: String(i),
     name: a.name,
     color: a.color,
-    columns: a.data.columns.map((c) => ({
-      axisLabel: c.axisLabel,
-      label: c.label,
-      term: c.axisTerm,
-      count: filterByEnrollment(c.students, a.data.countFilter).length,
-    })),
+    columns: seriesColumns(a.data),
   }))
 }
 
-/**
- * Every analysis overlaid on one graph, column N of each sharing slot N.
- * All series are drawn (each in its own group) so the toggles can show/hide them.
- */
 /**
  * Most analyses for which every on/off combination gets its own framed graph
  * (2^n - 1 of them), so framing fits exactly the curves switched on. Past this,
@@ -288,11 +328,12 @@ function combinedSvg(
   ).join('')
   const groups = series.map((s, si) => {
     const { points, label } = g.series[si]
-    const tip = esc(curveTip(s.name, s.columns.map((c) => c.count), s.columns.map((c) => c.axisLabel)))
+    const predicted = s.columns.map((c) => Boolean(c.predicted))
+    const tip = esc(curveTip(s.name, s.columns.map((c) => c.count), predicted, s.columns.map((c) => c.axisLabel)))
     const tipAttrs = `data-tip="${tip}" data-tip-color="${esc(s.color)}"`
     const polyline = points.map((p) => `${p.x},${p.y}`).join(' ')
     const line = points.length > 1
-      ? `<polyline class="combined__line" points="${polyline}"/>
+      ? `${segmentsSvg(points, predicted, 'combined__line')}
         <polyline class="curve-hit" points="${polyline}" ${tipAttrs}/>`
       : ''
     const curveLabel = label
@@ -300,8 +341,8 @@ function combinedSvg(
       : ''
     const marks = points.map((p, ci) => {
       const c = s.columns[ci]
-      const tip = `${s.name}: ${c.label}${c.term ? ` (${c.term})` : ''} - ${c.count} students`
-      return `<circle class="combined__dot" cx="${p.x}" cy="${p.y}" r="5"><title>${esc(tip)}</title></circle>
+      const tip = `${s.name}: ${c.label}${c.term ? ` (${c.term})` : ''} - ${c.count} ${c.predicted ? 'predicted' : 'students'}`
+      return `<circle class="combined__dot${c.predicted ? ' dot--predicted' : ''}" cx="${p.x}" cy="${p.y}" r="5"><title>${esc(tip)}</title></circle>
         <text class="combined__count" x="${p.x + 8}" y="${p.y - 8}">${p.count}</text>
         <text class="combined__x-label" x="${p.x}" y="${g.labelTop + si * g.labelRowHeight}" text-anchor="middle"><title>${esc(tip)}</title>${esc(c.axisLabel)}</text>`
     }).join('')
