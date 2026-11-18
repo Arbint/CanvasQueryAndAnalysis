@@ -2,9 +2,15 @@ import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useMemo, useRef, useState } from 'react'
 import { api } from '../../../api/client'
 import type { Student } from '../../../api/types'
-import { courseMatchesFilters, type CourseCollectionFilters } from '../../../lib/courseCollectionFilter'
+import {
+  courseMatchesFilters,
+  normalizeCollectionFilters,
+  type CollectionFilterRef,
+  type CourseCollectionFilters,
+} from '../../../lib/courseCollectionFilter'
 import { union } from '../../../lib/setOperations'
 import { useAppStore } from '../../../store/appStore'
+import { useResolvedCollectionFilters } from '../../../store/filterLibraryStore'
 import { CourseCollectionFilterPanel } from '../../shared/CourseCollectionFilterPanel'
 import { NodeCountBadge, NodeExpandPanel, useNodeExpand, useNodeStudentCount } from '../nodeShared'
 import '../NodeGraph.css'
@@ -13,6 +19,9 @@ export interface CourseCollectionNodeData extends Record<string, unknown> {
   students?: Student[]
   selectedTerms?: string[]
   department?: string
+  /** Filter expression (see courseCollectionFilter.ts). */
+  filter?: CollectionFilterRef | null
+  /** Legacy course number filters; converted to `filter` when the node loads. */
   includeFilters?: string[]
   excludeFilters?: string[]
 }
@@ -24,19 +33,15 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
   const studentCount = useNodeStudentCount(id)
   const nodeData = data as CourseCollectionNodeData
 
-  const [filters, setFilters] = useState<CourseCollectionFilters>({
-    selectedTerms: nodeData.selectedTerms ?? [],
-    department: nodeData.department ?? '',
-    includeFilters: nodeData.includeFilters ?? [],
-    excludeFilters: nodeData.excludeFilters ?? [],
-  })
+  const [filters, setFilters] = useState<CourseCollectionFilters>(() => normalizeCollectionFilters(nodeData))
+  const resolvedFilters = useResolvedCollectionFilters(filters)
   const [fetching, setFetching] = useState(false)
   const [, forceUpdate] = useState(0)
   const fetchCacheRef = useRef<Record<number, Student[]>>({})
 
   const matchedCourses = useMemo(
-    () => courses.filter((c) => courseMatchesFilters(c, filters)),
-    [courses, filters],
+    () => courses.filter((c) => courseMatchesFilters(c, resolvedFilters)),
+    [courses, resolvedFilters],
   )
 
   const handleCollect = async () => {
@@ -64,9 +69,13 @@ export function CourseCollectionNode({ id, data }: NodeProps) {
 
   const updateFilters = (next: CourseCollectionFilters) => {
     setFilters(next)
-    setNodes((nodes) => nodes.map((node) => (
-      node.id === id ? { ...node, data: { ...node.data, ...next } } : node
-    )))
+    setNodes((nodes) => nodes.map((node) => {
+      if (node.id !== id) return node
+      const data: Record<string, unknown> = { ...node.data, ...next }
+      delete data.includeFilters
+      delete data.excludeFilters
+      return { ...node, data }
+    }))
   }
 
   return (

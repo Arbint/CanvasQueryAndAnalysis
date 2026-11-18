@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/react'
+import { normalizeCollectionFilters } from './courseCollectionFilter'
 import type { GraphSnapshot, SavedSession, TrendAnalysisSnapshot, TrendColumnSnapshot } from '../store/appStore'
 
 function stripRuntimeNodeData(data: Record<string, unknown>) {
@@ -45,11 +46,8 @@ export function cleanTrendColumns(columns: TrendColumnSnapshot[]): TrendColumnSn
     mode: column.mode,
     label: column.label ?? '',
     courseId: column.courseId,
-    collection: {
-      selectedTerms: [...column.collection.selectedTerms],
-      department: column.collection.department,
-      numberPattern: column.collection.numberPattern,
-    },
+    // Saved in the current (expression) format, converting legacy number patterns.
+    collection: normalizeCollectionFilters(column.collection),
     matchedCourseCount: column.matchedCourseCount,
     width: column.width,
   }))

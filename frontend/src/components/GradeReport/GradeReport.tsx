@@ -3,6 +3,7 @@ import { api } from '../../api/client'
 import type { Course, Instructor } from '../../api/types'
 import { courseMatchesFilters, emptyCourseCollectionFilters, type CourseCollectionFilters } from '../../lib/courseCollectionFilter'
 import { useAppStore } from '../../store/appStore'
+import { useResolvedCollectionFilters } from '../../store/filterLibraryStore'
 import { CourseCollectionFilterPanel } from '../shared/CourseCollectionFilterPanel'
 import {
   buildGradeReport,
@@ -21,6 +22,7 @@ import './GradeReport.css'
 export function GradeReport() {
   const courses = useAppStore((s) => s.courses)
   const [filters, setFilters] = useState<CourseCollectionFilters>(emptyCourseCollectionFilters())
+  const resolvedFilters = useResolvedCollectionFilters(filters)
   const [report, setReport] = useState<GradeReportData | null>(null)
   const [instructors, setInstructors] = useState<Record<number, Instructor>>({})
   const [loading, setLoading] = useState(false)
@@ -32,8 +34,8 @@ export function GradeReport() {
   const [xlsxDownloading, setXlsxDownloading] = useState(false)
 
   const matchedCourses = useMemo(
-    () => courses.filter((c) => courseMatchesFilters(c, filters)),
-    [courses, filters],
+    () => courses.filter((c) => courseMatchesFilters(c, resolvedFilters)),
+    [courses, resolvedFilters],
   )
 
   const handleGenerateReport = async () => {

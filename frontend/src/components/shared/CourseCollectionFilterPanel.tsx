@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import type { Course } from '../../api/types'
 import { courseMatchesFilters, type CourseCollectionFilters } from '../../lib/courseCollectionFilter'
+import { useResolvedCollectionFilters } from '../../store/filterLibraryStore'
+import { CollectionFilterBar } from './CollectionFilterBar'
 import './CourseCollectionFilterPanel.css'
 
 interface CourseCollectionFilterPanelProps {
@@ -28,6 +30,7 @@ export function CourseCollectionFilterPanel({
   showCourseList = true,
 }: CourseCollectionFilterPanelProps) {
   const dragCls = nodrag ? ' nodrag' : ''
+  const resolved = useResolvedCollectionFilters(filters)
 
   const availableTerms = useMemo(
     () => [...new Set(courses.map((c) => c.term_name))].sort(),
@@ -35,8 +38,8 @@ export function CourseCollectionFilterPanel({
   )
 
   const matchedCourses = useMemo(
-    () => courses.filter((c) => courseMatchesFilters(c, filters)),
-    [courses, filters],
+    () => courses.filter((c) => courseMatchesFilters(c, resolved)),
+    [courses, resolved],
   )
 
   const toggleTerm = (term: string) => {
@@ -47,18 +50,6 @@ export function CourseCollectionFilterPanel({
         : [...filters.selectedTerms, term],
     })
   }
-
-  const addIncludeFilter = () => onChange({ ...filters, includeFilters: [...filters.includeFilters, ''] })
-  const updateIncludeFilter = (index: number, value: string) =>
-    onChange({ ...filters, includeFilters: filters.includeFilters.map((f, i) => (i === index ? value : f)) })
-  const removeIncludeFilter = (index: number) =>
-    onChange({ ...filters, includeFilters: filters.includeFilters.filter((_, i) => i !== index) })
-
-  const addExcludeFilter = () => onChange({ ...filters, excludeFilters: [...filters.excludeFilters, ''] })
-  const updateExcludeFilter = (index: number, value: string) =>
-    onChange({ ...filters, excludeFilters: filters.excludeFilters.map((f, i) => (i === index ? value : f)) })
-  const removeExcludeFilter = (index: number) =>
-    onChange({ ...filters, excludeFilters: filters.excludeFilters.filter((_, i) => i !== index) })
 
   return (
     <div className="ccf-panel">
@@ -92,53 +83,12 @@ export function CourseCollectionFilterPanel({
       </div>
 
       <div className="collection-filter">
-        <div className="collection-filter__label">Include Filters</div>
-        <div className={`collection-filter-list${dragCls}`}>
-          {filters.includeFilters.map((f, i) => (
-            <div className="collection-filter-row" key={i}>
-              <input
-                placeholder="e.g. 3*** or 3*7*"
-                value={f}
-                onChange={(e) => updateIncludeFilter(i, e.target.value)}
-              />
-              <button
-                className="collection-filter-remove"
-                onClick={() => removeIncludeFilter(i)}
-                aria-label="Remove include filter"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-        <button className={`collection-filter-add-btn${dragCls}`} onClick={addIncludeFilter}>
-          + Add Include Filter
-        </button>
-      </div>
-
-      <div className="collection-filter">
-        <div className="collection-filter__label">Exclude Filters</div>
-        <div className={`collection-filter-list${dragCls}`}>
-          {filters.excludeFilters.map((f, i) => (
-            <div className="collection-filter-row" key={i}>
-              <input
-                placeholder="e.g. 3*** or 3*7*"
-                value={f}
-                onChange={(e) => updateExcludeFilter(i, e.target.value)}
-              />
-              <button
-                className="collection-filter-remove"
-                onClick={() => removeExcludeFilter(i)}
-                aria-label="Remove exclude filter"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-        <button className={`collection-filter-add-btn${dragCls}`} onClick={addExcludeFilter}>
-          + Add Exclude Filter
-        </button>
+        <div className="collection-filter__label">Filter</div>
+        <CollectionFilterBar
+          filter={resolved.filter}
+          onChange={(filter) => onChange({ ...filters, filter })}
+          nodrag={nodrag}
+        />
       </div>
 
       <div className={`collection-collect-row${dragCls}`}>

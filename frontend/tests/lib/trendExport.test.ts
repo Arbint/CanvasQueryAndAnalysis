@@ -54,14 +54,14 @@ describe('buildTrendSnapshotHtml', () => {
   })
 
   it('pre-renders a framed combined graph per on/off combination, showing the initial one', () => {
-    const variants = [...doc.querySelectorAll('[data-combined-framed] > [data-mask]')]
+    const variants = Array.from(doc.querySelectorAll('[data-combined-framed] > [data-mask]'))
     expect(variants.map((v) => v.getAttribute('data-mask'))).toEqual(['0', '1', '2', '3'])
     // Only Cohort A starts switched on.
     expect(variants.filter((v) => !v.hasAttribute('hidden')).map((v) => v.getAttribute('data-mask'))).toEqual(['1'])
   })
 
   it('labels each combined curve and gives curves a trend popup', () => {
-    const labels = [...doc.querySelectorAll('#combined .graph--default .combined__label')].map((l) => l.textContent)
+    const labels = Array.from(doc.querySelectorAll('#combined .graph--default .combined__label')).map((l) => l.textContent)
     expect(labels).toEqual(['Cohort A', 'Cohort B'])
     const tip = doc.querySelector('#combined .graph--default g[data-series="0"] .curve-hit')!.getAttribute('data-tip')!
     expect(tip.split('\n')[0]).toBe('Cohort A')
@@ -71,7 +71,7 @@ describe('buildTrendSnapshotHtml', () => {
   })
 
   it('framed single graph fits the counts instead of starting at 0', () => {
-    const ticks = [...doc.querySelectorAll('#analysis-1 .variant:not([hidden]) .graph--framed .trend-graph__tick')]
+    const ticks = Array.from(doc.querySelectorAll('#analysis-1 .variant:not([hidden]) .graph--framed .trend-graph__tick'))
       .map((t) => Number(t.textContent))
     expect(Math.min(...ticks)).toBeGreaterThan(0)
   })

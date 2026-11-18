@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Edge, Node } from '@xyflow/react'
 import type { Course, Student } from '../api/types'
+import type { CollectionFilterRef } from '../lib/courseCollectionFilter'
 
 export interface CourseSearchSettings {
   selectedTermIds: string[]
@@ -15,7 +16,10 @@ export interface GraphSnapshot {
 export interface TrendCollectionFilters {
   selectedTerms: string[]
   department: string
-  numberPattern: string
+  /** Filter expression; absent in sessions saved before expressions existed. */
+  filter?: CollectionFilterRef | null
+  /** Legacy course number pattern, converted to `filter` on load. */
+  numberPattern?: string
 }
 
 export interface TrendColumnSnapshot {

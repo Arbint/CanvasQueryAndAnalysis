@@ -4,6 +4,15 @@ import type { Course, Student } from '../../api/types'
 import { union } from '../../lib/setOperations'
 import { uniqueId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
+import { useFilterLibrary } from '../../store/filterLibraryStore'
+import {
+  courseMatchesFilters,
+  emptyCourseCollectionFilters,
+  normalizeCollectionFilters,
+  resolveCollectionFilters,
+  type CourseCollectionFilters,
+} from '../../lib/courseCollectionFilter'
+import { CourseCollectionFilterPanel } from '../shared/CourseCollectionFilterPanel'
 import type { TrendColumnSnapshot, TrendCountFilter } from '../../store/appStore'
 import {
   compareStudents,
@@ -22,41 +31,12 @@ import { CurvePopup, type CurveHover } from './CurvePopup'
 import { downloadCSV, emailsString } from '../StudentList/exportUtils'
 import './TrendAnalysis.css'
 
-// --- Collection filter utilities (same logic as CourseCollectionNode) ---
-
-function parseDepartment(courseCode: string): string {
-  return courseCode.match(/^[A-Za-z]+/)?.[0]?.toUpperCase() ?? ''
-}
-
-function parseCourseNumber(courseCode: string): string {
-  return courseCode.match(/\d{4}/)?.[0] ?? courseCode.match(/\d+/)?.[0] ?? ''
-}
-
-function matchesWildcard(pattern: string, value: string): boolean {
-  const regexStr = [...pattern]
-    .map((c) => (c === '*' ? '.' : c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
-    .join('')
-  return new RegExp(`^${regexStr}$`).test(value)
-}
-
-function courseMatchesFilters(
-  course: Course,
-  selectedTerms: string[],
-  department: string,
-  numberPattern: string,
-): boolean {
-  if (selectedTerms.length > 0 && !selectedTerms.includes(course.term_name)) return false
-  if (department && parseDepartment(course.course_code) !== department.trim().toUpperCase()) return false
-  if (numberPattern.trim() && !matchesWildcard(numberPattern.trim(), parseCourseNumber(course.course_code))) return false
-  return true
-}
-
 // --- Types ---
 
-interface CollectionFilters {
-  selectedTerms: string[]
-  department: string
-  numberPattern: string
+/** Courses a collection column gathers, with its linked expression read from the filter library. */
+function collectionCourses(courses: Course[], filters: CourseCollectionFilters): Course[] {
+  const resolved = resolveCollectionFilters(filters, useFilterLibrary.getState().filters)
+  return courses.filter((c) => courseMatchesFilters(c, resolved))
 }
 
 interface TrendColumn {
@@ -65,7 +45,7 @@ interface TrendColumn {
   /** User-defined name; empty means use the automatic label. */
   label: string
   courseId: number | null
-  collection: CollectionFilters
+  collection: CourseCollectionFilters
   matchedCourseCount: number
   loading: boolean
   error: string | null
@@ -88,7 +68,7 @@ const makeColumn = (): TrendColumn => ({
   mode: 'course',
   label: '',
   courseId: null,
-  collection: { selectedTerms: [], department: '', numberPattern: '' },
+  collection: emptyCourseCollectionFilters(),
   matchedCourseCount: 0,
   loading: false,
   error: null,
@@ -106,7 +86,7 @@ function columnFromSnapshot(snapshot: TrendColumnSnapshot): TrendColumn {
     mode: snapshot.mode,
     label: snapshot.label ?? '',
     courseId: snapshot.courseId,
-    collection: { ...snapshot.collection, selectedTerms: [...snapshot.collection.selectedTerms] },
+    collection: normalizeCollectionFilters(snapshot.collection),
     matchedCourseCount: snapshot.matchedCourseCount,
     loading: false,
     error: null,
@@ -129,78 +109,31 @@ function columnToSnapshot(column: TrendColumn): TrendColumnSnapshot {
 
 // --- Collection filters UI ---
 
+/** Same filter panel as the aggregation graph's Course Collection node. */
 function CollectionFiltersUI({
   filters,
   onChange,
   onCollect,
   loading,
 }: {
-  filters: CollectionFilters
-  onChange: (updated: CollectionFilters) => void
+  filters: CourseCollectionFilters
+  onChange: (updated: CourseCollectionFilters) => void
   onCollect: () => void
   loading: boolean
 }) {
   const courses = useAppStore((s) => s.courses)
-  const availableTerms = useMemo(() => [...new Set(courses.map((c) => c.term_name))].sort(), [courses])
-  const matchedCount = useMemo(
-    () => courses.filter((c) => courseMatchesFilters(c, filters.selectedTerms, filters.department, filters.numberPattern)).length,
-    [courses, filters.selectedTerms, filters.department, filters.numberPattern],
-  )
-
-  const toggleTerm = (term: string) =>
-    onChange({
-      ...filters,
-      selectedTerms: filters.selectedTerms.includes(term)
-        ? filters.selectedTerms.filter((t) => t !== term)
-        : [...filters.selectedTerms, term],
-    })
-
   return (
     <div className="trend-collection-filters">
-      <div className="collection-filter">
-        <div className="collection-filter__label">Terms</div>
-        <div className="collection-terms">
-          {availableTerms.length === 0 ? (
-            <span className="collection-empty">Search courses first</span>
-          ) : (
-            availableTerms.map((term) => (
-              <button
-                key={term}
-                className={`collection-term-chip${filters.selectedTerms.includes(term) ? ' collection-term-chip--active' : ''}`}
-                onClick={() => toggleTerm(term)}
-              >
-                {term}
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-      <div className="collection-filter">
-        <div className="collection-filter__label">Department</div>
-        <input
-          placeholder="e.g. ANGD"
-          value={filters.department}
-          onChange={(e) => onChange({ ...filters, department: e.target.value })}
-        />
-      </div>
-      <div className="collection-filter">
-        <div className="collection-filter__label">Course Number</div>
-        <input
-          placeholder="e.g. 3*** or 3*7*"
-          value={filters.numberPattern}
-          onChange={(e) => onChange({ ...filters, numberPattern: e.target.value })}
-        />
-      </div>
-      <div className="trend-collect-row">
-        <span className="collection-empty">{matchedCount} matched</span>
-        <button
-          className="trend-collect-btn"
-          onClick={onCollect}
-          disabled={loading || matchedCount === 0}
-        >
-          {loading ? 'Loading…' : 'Collect'}
-        </button>
-      </div>
+      <CourseCollectionFilterPanel
+        courses={courses}
+        filters={filters}
+        onChange={onChange}
+        actionLabel="Collect"
+        onAction={onCollect}
+        actionDisabled={loading}
+        actionLoading={loading}
+        showCourseList={false}
+      />
     </div>
   )
 }
@@ -254,8 +187,10 @@ function truncate(value: string, max = 24): string {
 /** Label generated from the column's course or collection filters. */
 function autoLabel(column: TrendColumn, course: Course | null): string {
   if (column.mode === 'collection') {
-    const { department, numberPattern, selectedTerms } = column.collection
-    if (department && numberPattern) return `${department.toUpperCase()} ${numberPattern}`
+    const { department, selectedTerms } = column.collection
+    const filterName = resolveCollectionFilters(column.collection, useFilterLibrary.getState().filters).filter?.name
+    if (department && filterName) return `${department.toUpperCase()} ${filterName}`
+    if (filterName) return filterName
     if (department) return department.toUpperCase()
     if (selectedTerms.length === 1) return selectedTerms[0]
     if (selectedTerms.length > 1) return `${selectedTerms.length} Terms`
@@ -414,8 +349,7 @@ export function TrendAnalysis({
         }
 
         if (column.mode === 'collection') {
-          const { selectedTerms, department, numberPattern } = column.collection
-          const matched = courses.filter((c) => courseMatchesFilters(c, selectedTerms, department, numberPattern))
+          const matched = collectionCourses(courses, column.collection)
           if (matched.length === 0) return { ...column, matchedCourseCount: 0, loading: false }
           try {
             const lists = await Promise.all(matched.map((course) => api.getStudents(course.id)))
@@ -499,15 +433,14 @@ export function TrendAnalysis({
     setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, label } : col))
   }
 
-  const setCollectionFilters = (columnId: string, collection: CollectionFilters) => {
+  const setCollectionFilters = (columnId: string, collection: CourseCollectionFilters) => {
     setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, collection } : col))
   }
 
   const handleCollect = async (columnId: string) => {
     const column = columns.find((col) => col.id === columnId)
     if (!column || column.mode !== 'collection') return
-    const { selectedTerms, department, numberPattern } = column.collection
-    const matched = courses.filter((c) => courseMatchesFilters(c, selectedTerms, department, numberPattern))
+    const matched = collectionCourses(courses, column.collection)
     if (matched.length === 0) return
 
     if (!collectCacheRef.current[columnId]) collectCacheRef.current[columnId] = {}
