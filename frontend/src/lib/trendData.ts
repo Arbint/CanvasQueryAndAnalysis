@@ -38,38 +38,200 @@ export function compareStudents<T extends Student>(previous: T[] | null, current
   }
 }
 
+// --- Graph scales and framing ---
+
+/** Vertical axis of a graph: the value range shown and where grid lines sit. */
+export interface YScale {
+  min: number
+  max: number
+  ticks: number[]
+}
+
+/** Pixel size to fit a graph into ("frame" it), like a graph editor's Frame All. */
+export interface FrameSize {
+  width: number
+  height: number
+}
+
+export const GRAPH_TICKS = [0, 0.25, 0.5, 0.75, 1]
+
+/** Default axis: 0 up to the largest count. */
+export function zeroBasedScale(values: number[]): YScale {
+  const max = Math.max(1, ...values)
+  return { min: 0, max, ticks: GRAPH_TICKS.map((t) => max * t) }
+}
+
+function niceStep(range: number, target: number): number {
+  const raw = range / target
+  const magnitude = 10 ** Math.floor(Math.log10(raw))
+  const norm = raw / magnitude
+  const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * magnitude
+  return Math.max(1, step)
+}
+
+/**
+ * Framed axis: the counts' own range plus a little headroom, on whole-number
+ * ticks, so small differences between columns fill the graph height.
+ */
+export function framedScale(values: number[]): YScale {
+  if (values.length === 0) return zeroBasedScale(values)
+  let lo = Math.min(...values)
+  let hi = Math.max(...values)
+  const pad = hi === lo ? Math.max(1, Math.abs(hi) * 0.1) : (hi - lo) * 0.1
+  lo = Math.max(0, lo - pad)
+  hi += pad
+  const step = niceStep(hi - lo, 4)
+  const min = Math.floor(lo / step) * step
+  const max = Math.max(min + step, Math.ceil(hi / step) * step)
+  const ticks: number[] = []
+  for (let v = min; v <= max + step / 2; v += step) ticks.push(v)
+  return { min, max, ticks }
+}
+
+/** Y pixel of a value on a scale whose plot area spans top..top+height. */
+export function scaleY(scale: YScale, value: number, top: number, height: number): number {
+  const span = scale.max - scale.min || 1
+  return top + height - ((value - scale.min) / span) * height
+}
+
+export function formatTick(value: number): string {
+  return String(Math.round(value))
+}
+
 export interface TrendGraphLayout {
   width: number
   height: number
   padX: number
   padTop: number
   padBottom: number
-  maxCount: number
+  scale: YScale
   points: { x: number; y: number; count: number }[]
 }
 
-export const GRAPH_TICKS = [0, 0.25, 0.5, 0.75, 1]
-
-/** Positions one point per column; each column's point sits over its card. */
-export function layoutTrendGraph(widths: number[], counts: number[]): TrendGraphLayout {
+/**
+ * Positions one point per column. By default each column's point sits over
+ * its card; with `frame`, the points spread evenly across the given size and
+ * the axis fits the counts.
+ */
+export function layoutTrendGraph(widths: number[], counts: number[], frame?: FrameSize): TrendGraphLayout {
   const gap = 8
-  const maxCount = Math.max(1, ...counts)
-  const contentWidth = widths.reduce((sum, w) => sum + w, 0) + Math.max(0, widths.length - 1) * gap
-  const width = Math.max(640, contentWidth + 112)
-  const height = 320
   const padX = 56
   const padTop = 24
   const padBottom = 88
+  if (frame) {
+    const width = Math.max(240, frame.width)
+    const height = Math.max(padTop + padBottom + 80, frame.height)
+    const plotHeight = height - padTop - padBottom
+    const scale = framedScale(counts)
+    const slot = (width - padX * 2) / Math.max(1, counts.length)
+    const points = counts.map((count, i) => ({
+      x: padX + slot * (i + 0.5),
+      y: scaleY(scale, count, padTop, plotHeight),
+      count,
+    }))
+    return { width, height, padX, padTop, padBottom, scale, points }
+  }
+  const scale = zeroBasedScale(counts)
+  const contentWidth = widths.reduce((sum, w) => sum + w, 0) + Math.max(0, widths.length - 1) * gap
+  const width = Math.max(640, contentWidth + 112)
+  const height = 320
   const plotHeight = height - padTop - padBottom
   let offset = padX
   const points = widths.map((w, i) => {
     const count = counts[i]
     const x = offset + w / 2
-    const y = padTop + plotHeight - (count / maxCount) * plotHeight
+    const y = scaleY(scale, count, padTop, plotHeight)
     offset += w + gap
     return { x, y, count }
   })
-  return { width, height, padX, padTop, padBottom, maxCount, points }
+  return { width, height, padX, padTop, padBottom, scale, points }
+}
+
+// --- Curve summaries (hover popups) ---
+
+export type TrendDirection = 'growing' | 'declining' | 'stable' | 'single'
+
+export const trendDirectionLabels: Record<TrendDirection, string> = {
+  growing: 'Growing',
+  declining: 'Declining',
+  stable: 'Stable',
+  single: 'Single column',
+}
+
+export interface TrendSummary {
+  direction: TrendDirection
+  first: number
+  last: number
+  change: number
+  /** Change as a percentage of the first count; null when the first count is 0. */
+  changePct: number | null
+  /** Least-squares slope: average students gained (or lost) per column. */
+  slope: number
+  average: number
+  peak: { index: number; count: number }
+  low: { index: number; count: number }
+  columnCount: number
+}
+
+/** Overall trend of a curve, judged by its least-squares slope relative to its mean. */
+export function summarizeTrend(counts: number[]): TrendSummary | null {
+  const n = counts.length
+  if (n === 0) return null
+  const average = counts.reduce((sum, c) => sum + c, 0) / n
+  const meanX = (n - 1) / 2
+  let num = 0
+  let den = 0
+  counts.forEach((c, i) => {
+    num += (i - meanX) * (c - average)
+    den += (i - meanX) ** 2
+  })
+  const slope = den === 0 ? 0 : num / den
+  // Total fitted change across the curve, relative to its average size.
+  const relative = (slope * (n - 1)) / Math.max(1, average)
+  const direction: TrendDirection =
+    n < 2 ? 'single' : relative > 0.05 ? 'growing' : relative < -0.05 ? 'declining' : 'stable'
+  let peak = { index: 0, count: counts[0] }
+  let low = { index: 0, count: counts[0] }
+  counts.forEach((count, index) => {
+    if (count > peak.count) peak = { index, count }
+    if (count < low.count) low = { index, count }
+  })
+  const first = counts[0]
+  const last = counts[n - 1]
+  return {
+    direction,
+    first,
+    last,
+    change: last - first,
+    changePct: first === 0 ? null : ((last - first) / first) * 100,
+    slope,
+    average,
+    peak,
+    low,
+    columnCount: n,
+  }
+}
+
+function signed(value: number, digits = 0): string {
+  const text = Math.abs(value).toFixed(digits)
+  if (Number(text) === 0) return text
+  return value > 0 ? `+${text}` : `-${text}`
+}
+
+/** Text lines describing a curve, shared by the live popup and the export's hover titles. */
+export function trendSummaryLines(summary: TrendSummary, columnName: (index: number) => string): string[] {
+  const lines = [`Trend: ${trendDirectionLabels[summary.direction]}`]
+  if (summary.columnCount > 1) {
+    const pct = summary.changePct === null ? '' : `, ${signed(summary.changePct, 1)}%`
+    lines.push(`Overall: ${summary.first} → ${summary.last} (${signed(summary.change)}${pct})`)
+    lines.push(`Avg change per column: ${signed(summary.slope, 1)}`)
+  }
+  lines.push(`Peak: ${summary.peak.count} at ${columnName(summary.peak.index)}`)
+  lines.push(`Low: ${summary.low.count} at ${columnName(summary.low.index)}`)
+  lines.push(
+    `Average: ${summary.average.toFixed(1)} over ${summary.columnCount} column${summary.columnCount === 1 ? '' : 's'}`,
+  )
+  return lines
 }
 
 // --- Combined view (every analysis overlaid on one graph) ---
@@ -97,54 +259,123 @@ export interface CombinedSeries {
   columns: CombinedSeriesColumn[]
 }
 
+export interface CurveLabel {
+  x: number
+  y: number
+  text: string
+}
+
 export interface CombinedGraphLayout {
   width: number
   height: number
   padX: number
   padTop: number
   padBottom: number
-  maxCount: number
+  scale: YScale
   /** X position of each column slot (column 1, 2, ...). */
   slotXs: number[]
   /** Y of the first label row; each series gets its own row below it. */
   labelTop: number
   labelRowHeight: number
-  series: { points: { x: number; y: number; count: number }[] }[]
+  series: { points: { x: number; y: number; count: number }[]; label: CurveLabel | null }[]
+}
+
+const CURVE_LABEL_MAX_CHARS = 22
+const CURVE_LABEL_CHAR_WIDTH = 6.6
+const CURVE_LABEL_HEIGHT = 14
+
+export function curveLabelText(name: string): string {
+  return name.length > CURVE_LABEL_MAX_CHARS ? `${name.slice(0, CURVE_LABEL_MAX_CHARS - 1)}…` : name
+}
+
+type LabelAnchor = { x: number; y: number; text: string }
+
+/**
+ * Names each curve just right of its last point. Labels that would overlap
+ * (similar height and overlapping horizontally) are pushed apart vertically.
+ */
+function placeCurveLabels(anchors: (LabelAnchor | null)[], minY: number, maxY: number): (CurveLabel | null)[] {
+  const order = anchors
+    .map((anchor, index) => ({ anchor, index }))
+    .filter((e): e is { anchor: LabelAnchor; index: number } => e.anchor !== null)
+    .sort((p, q) => p.anchor.y - q.anchor.y)
+  const placed: { x: number; right: number; y: number }[] = []
+  const result: (CurveLabel | null)[] = anchors.map(() => null)
+  for (const { anchor, index } of order) {
+    const x = anchor.x + 12
+    const right = x + anchor.text.length * CURVE_LABEL_CHAR_WIDTH
+    let y = Math.max(minY, anchor.y + 4)
+    let moved = true
+    while (moved) {
+      moved = false
+      for (const p of placed) {
+        if (right > p.x && x < p.right && Math.abs(p.y - y) < CURVE_LABEL_HEIGHT) {
+          y = p.y + CURVE_LABEL_HEIGHT
+          moved = true
+        }
+      }
+    }
+    y = Math.min(maxY, y)
+    placed.push({ x, right, y })
+    result[index] = { x, y, text: anchor.text }
+  }
+  return result
 }
 
 /**
  * Lays out several analyses on one graph. Columns are matched by position:
  * column N of every analysis shares slot N; a longer analysis simply extends
- * further right. Each series gets a fixed label row under the axis.
+ * further right. Each series gets a fixed label row under the axis and a
+ * name label at the end of its curve. With `frame`, the graph fills the given
+ * size and the axis fits the counts.
  */
-export function layoutCombinedGraph(series: CombinedSeries[]): CombinedGraphLayout {
-  const slot = 180
+export function layoutCombinedGraph(series: CombinedSeries[], frame?: FrameSize): CombinedGraphLayout {
   const padX = 56
   const padTop = 24
-  const plotHeight = 240
   const labelRowHeight = 16
   const slots = Math.max(1, ...series.map((s) => s.columns.length))
-  const maxCount = Math.max(1, ...series.flatMap((s) => s.columns.map((c) => c.count)))
+  const counts = series.flatMap((s) => s.columns.map((c) => c.count))
   const padBottom = 24 + Math.max(1, series.length) * labelRowHeight + 8
-  const width = Math.max(640, padX * 2 + slots * slot)
+  const longestLabel = Math.max(0, ...series.map((s) => curveLabelText(s.name).length))
+  // Extra room right of the last slot so the curve name labels are not cut off.
+  const labelSpace = Math.max(0, longestLabel * CURVE_LABEL_CHAR_WIDTH + 16 - padX)
+  let slot = 180
+  let plotHeight = 240
+  let scale = zeroBasedScale(counts)
+  if (frame) {
+    slot = Math.max(48, (frame.width - padX * 2 - labelSpace) / slots)
+    plotHeight = Math.max(80, frame.height - padTop - padBottom)
+    scale = framedScale(counts)
+  }
+  const naturalWidth = padX * 2 + slots * slot + labelSpace
+  const width = frame ? Math.max(frame.width, naturalWidth) : Math.max(640, naturalWidth)
   const height = padTop + plotHeight + padBottom
   const slotXs = Array.from({ length: slots }, (_, i) => padX + slot * (i + 0.5))
+  const laidOut = series.map((s) =>
+    s.columns.map((c, i) => ({
+      x: slotXs[i],
+      y: scaleY(scale, c.count, padTop, plotHeight),
+      count: c.count,
+    })),
+  )
+  const labels = placeCurveLabels(
+    laidOut.map((points, si) => {
+      const last = points[points.length - 1]
+      return last ? { x: last.x, y: last.y, text: curveLabelText(series[si].name) } : null
+    }),
+    padTop + 10,
+    padTop + plotHeight + 4,
+  )
   return {
     width,
     height,
     padX,
     padTop,
     padBottom,
-    maxCount,
+    scale,
     slotXs,
     labelTop: padTop + plotHeight + 24,
     labelRowHeight,
-    series: series.map((s) => ({
-      points: s.columns.map((c, i) => ({
-        x: slotXs[i],
-        y: padTop + plotHeight - (c.count / maxCount) * plotHeight,
-        count: c.count,
-      })),
-    })),
+    series: laidOut.map((points, si) => ({ points, label: labels[si] })),
   }
 }

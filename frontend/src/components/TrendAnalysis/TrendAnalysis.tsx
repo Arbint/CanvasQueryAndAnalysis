@@ -6,14 +6,19 @@ import { uniqueId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
 import type { TrendColumnSnapshot, TrendCountFilter } from '../../store/appStore'
 import {
-  GRAPH_TICKS,
   compareStudents,
   countFilterLabels,
   countFilters,
   filterByEnrollment,
+  formatTick,
   layoutTrendGraph,
+  scaleY,
+  summarizeTrend,
+  trendSummaryLines,
   type Comparison,
 } from '../../lib/trendData'
+import { useElementSize } from '../../lib/useElementSize'
+import { CurvePopup, type CurveHover } from './CurvePopup'
 import { downloadCSV, emailsString } from '../StudentList/exportUtils'
 import './TrendAnalysis.css'
 
@@ -337,6 +342,11 @@ export function TrendAnalysis({
   })
   const [countFilter, setCountFilter] = useState<TrendCountFilter>(initialCountFilter)
   const [zoom, setZoom] = useState(1)
+  // Framed: the graph fits its viewport and the axis fits the counts (Frame button / F key).
+  const [framed, setFramed] = useState(false)
+  const [hoveredCurve, setHoveredCurve] = useState<CurveHover | null>(null)
+  const graphViewportRef = useRef<HTMLDivElement>(null)
+  const graphViewportSize = useElementSize(graphViewportRef)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [menu, setMenu] = useState<{ index: number; x: number; y: number } | null>(null)
   // Per-column fetch cache: columnId → courseId → Student[]
@@ -438,11 +448,20 @@ export function TrendAnalysis({
     compareStudents(i > 0 ? visibleStudents[i - 1] : null, students),
   )
 
+  const frame = framed && graphViewportSize.width > 0 && graphViewportSize.height > 0 ? graphViewportSize : undefined
   const graph = useMemo(
-    () => layoutTrendGraph(columns.map((col) => col.width), visibleStudents.map((students) => students.length)),
-    [columns, visibleStudents],
+    () => layoutTrendGraph(columns.map((col) => col.width), visibleStudents.map((students) => students.length), frame),
+    [columns, visibleStudents, frame],
   )
-  const maxCount = graph.maxCount
+  const plotHeight = graph.height - graph.padTop - graph.padBottom
+  const zoomBy = (delta: number) => {
+    setFramed(false)
+    setZoom((v) => Math.min(2, Math.max(0.6, v + delta)))
+  }
+  const resetView = () => {
+    setFramed(false)
+    setZoom(1)
+  }
 
   const setColumnCourse = async (columnId: string, courseId: number) => {
     setColumns((curr) =>
@@ -605,20 +624,30 @@ export function TrendAnalysis({
 
   const activeMenu = menu ? comparisons[menu.index] : null
   const hoveredComparison = hoveredIndex === null ? null : comparisons[hoveredIndex]
+  const curveSummary = hoveredCurve ? summarizeTrend(graph.points.map((p) => p.count)) : null
+  const curvePoints = graph.points.map((p) => `${p.x},${p.y}`).join(' ')
 
   return (
     <div className="trend-analysis" onClick={() => setMenu(null)}>
 
       <section className="trend-graph" onContextMenu={(e) => e.preventDefault()}>
         <div className="trend-graph__toolbar">
-          <button className="trend-icon-button" title="Zoom out" onClick={() => setZoom((v) => Math.max(0.6, v - 0.2))}>
+          <button className="trend-icon-button" title="Zoom out" onClick={() => zoomBy(-0.2)}>
             -
           </button>
-          <button className="trend-icon-button" title="Auto fit" onClick={() => setZoom(1)}>
-            Fit
-          </button>
-          <button className="trend-icon-button" title="Zoom in" onClick={() => setZoom((v) => Math.min(2, v + 0.2))}>
+          <button className="trend-icon-button" title="Zoom in" onClick={() => zoomBy(0.2)}>
             +
+          </button>
+          <button
+            className={`trend-icon-button trend-frame-button${framed ? ' trend-frame-button--on' : ''}`}
+            title="Frame: fit the curve to the graph, horizontally and vertically (F)"
+            aria-pressed={framed}
+            onClick={() => setFramed(true)}
+          >
+            Frame
+          </button>
+          <button className="trend-icon-button" title="Reset to the default view (points over their columns)" onClick={resetView}>
+            Reset
           </button>
           <label className="trend-count-filter" title="Which students are counted in each column">
             <span>Count</span>
@@ -632,35 +661,56 @@ export function TrendAnalysis({
             </select>
           </label>
         </div>
-        <div className="trend-graph__viewport">
+        <div
+          ref={graphViewportRef}
+          className={`trend-graph__viewport${frame ? ' trend-graph__viewport--framed' : ''}`}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'f' || e.key === 'F') setFramed(true)
+          }}
+        >
           <svg
             className="trend-graph__svg"
-            width={graph.width * zoom}
+            width={frame ? graph.width : graph.width * zoom}
             height={graph.height}
             viewBox={`0 0 ${graph.width} ${graph.height}`}
           >
             <line className="trend-graph__axis" x1={graph.padX} y1={graph.height - graph.padBottom} x2={graph.width - graph.padX} y2={graph.height - graph.padBottom} />
             <line className="trend-graph__axis" x1={graph.padX} y1={graph.padTop} x2={graph.padX} y2={graph.height - graph.padBottom} />
-            {GRAPH_TICKS.map((tick) => {
-              const y = graph.padTop + (1 - tick) * (graph.height - graph.padTop - graph.padBottom)
+            {graph.scale.ticks.map((tick) => {
+              const y = scaleY(graph.scale, tick, graph.padTop, plotHeight)
               return (
                 <g key={tick}>
                   <line className="trend-graph__grid" x1={graph.padX} y1={y} x2={graph.width - graph.padX} y2={y} />
                   <text className="trend-graph__tick" x={graph.padX - 10} y={y + 4} textAnchor="end">
-                    {Math.round(maxCount * tick)}
+                    {formatTick(tick)}
                   </text>
                 </g>
               )
             })}
-            {graph.points.length > 1 && (
-              <polyline
-                className="trend-graph__line"
-                points={graph.points.map((p) => `${p.x},${p.y}`).join(' ')}
+            {graph.points.map((point, index) => (
+              <line
+                key={columns[index].id}
+                className="trend-graph__column-line"
+                x1={point.x}
+                y1={graph.padTop}
+                x2={point.x}
+                y2={graph.height - graph.padBottom}
               />
+            ))}
+            {graph.points.length > 1 && (
+              <g className={`trend-curve${hoveredCurve ? ' trend-curve--highlight' : ''}`}>
+                <polyline className="trend-graph__line" points={curvePoints} />
+                <polyline
+                  className="trend-curve__hit"
+                  points={curvePoints}
+                  onMouseMove={(e) => setHoveredCurve({ x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setHoveredCurve(null)}
+                />
+              </g>
             )}
             {graph.points.map((point, index) => (
               <g key={columns[index].id}>
-                <line className="trend-graph__column-line" x1={point.x} y1={graph.padTop} x2={point.x} y2={graph.height - graph.padBottom} />
                 <circle
                   className="trend-graph__dot"
                   cx={point.x}
@@ -696,6 +746,16 @@ export function TrendAnalysis({
               <div>Lost: {hoveredComparison.lost.length}</div>
               <div>New: {hoveredComparison.added.length}</div>
             </div>
+          )}
+          {hoveredCurve && hoveredIndex === null && curveSummary && (
+            <CurvePopup
+              at={hoveredCurve}
+              title="Trend"
+              lines={trendSummaryLines(
+                curveSummary,
+                (i) => `column ${i + 1} (${axisLabel(columns[i], selectedCourses[i])})`,
+              )}
+            />
           )}
         </div>
       </section>

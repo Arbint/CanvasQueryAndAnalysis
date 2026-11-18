@@ -809,3 +809,62 @@
   font-size: 11px;
   font-weight: 600;
 }
+
+/* --- Framing (Frame button / F key) --- */
+
+.trend-graph__viewport:focus,
+.trend-combined__viewport:focus {
+  outline: none;
+}
+
+/* A framed graph fits its viewport exactly; hiding overflow avoids scrollbar feedback loops. */
+.trend-graph__viewport--framed,
+.trend-combined__viewport--framed {
+  overflow: hidden;
+}
+
+.trend-frame-button--on {
+  border-color: var(--color-accent-blue);
+  color: var(--color-accent-blue);
+}
+
+/* --- Curve hover, highlight and labels --- */
+
+/* Wide invisible stroke so a curve is easy to hover. */
+.trend-curve__hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: help;
+}
+
+.trend-curve {
+  transition: opacity 120ms ease;
+}
+
+.trend-curve--dim {
+  opacity: 0.2;
+}
+
+.trend-curve--highlight .trend-combined__line,
+.trend-curve--highlight .trend-graph__line {
+  stroke-width: 3.5;
+}
+
+.trend-curve__label {
+  fill: currentColor;
+  font-size: 12px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--color-bg-base);
+  stroke-width: 3px;
+  cursor: help;
+}
+
+.trend-tooltip--follow {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  color: var(--color-text-primary);
+}

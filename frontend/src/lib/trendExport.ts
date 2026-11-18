@@ -2,14 +2,18 @@ import type { Student } from '../api/types'
 import type { TrendExportColumn, TrendExportData, TrendExportStudent } from '../components/TrendAnalysis/TrendAnalysis'
 import type { TrendCountFilter } from '../store/appStore'
 import {
-  GRAPH_TICKS,
   compareStudents,
   countFilterLabels,
   countFilters,
   filterByEnrollment,
+  formatTick,
   layoutCombinedGraph,
   layoutTrendGraph,
+  scaleY,
+  summarizeTrend,
+  trendSummaryLines,
   type CombinedSeries,
+  type FrameSize,
   type Comparison,
 } from './trendData'
 
@@ -93,6 +97,22 @@ summary { cursor: pointer; color: var(--text); }
 .combined__dot { fill: currentColor; stroke: var(--bg-base); stroke-width: 2; }
 .combined__count { fill: currentColor; font-size: 11px; }
 .combined__x-label { fill: currentColor; font-size: 11px; font-weight: 600; }
+.curve-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: help; }
+.combined__label { fill: currentColor; font-size: 12px; font-weight: 700; paint-order: stroke; stroke: var(--bg-base); stroke-width: 3px; cursor: help; }
+g[data-series] { transition: opacity 120ms ease; }
+svg:has(g[data-series]:hover) g[data-series]:not(:hover) { opacity: 0.2; }
+g[data-series]:hover .combined__line, .trend-curve:hover .trend-graph__line { stroke-width: 3.5; }
+.graph-tools { display: flex; gap: 6px; margin-bottom: 6px; }
+.graph-tools button { height: 24px; padding: 0 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-input); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.graph-tools button:hover { border-color: var(--blue); color: var(--heading); }
+.graph-tools button[aria-pressed="true"] { border-color: var(--blue); color: var(--blue); }
+.graph-tools span { align-self: center; color: var(--muted); font-size: 11px; }
+section.analysis:not([data-view="framed"]) .graph--framed, section.analysis[data-view="framed"] .graph--default { display: none; }
+.graph--framed { overflow: hidden; }
+.graph--framed svg { width: 100%; height: auto; }
+.graph--framed .empty { padding: 24px; text-align: center; }
+.tip { position: fixed; z-index: 100; width: 260px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45); color: var(--text); font-size: 13px; pointer-events: none; }
+.tip__title { margin-bottom: 4px; color: var(--heading); font-weight: 600; }
 `
 
 function studentListHtml(students: Student[]) {
@@ -120,24 +140,43 @@ function filterColumns(columns: TrendExportColumn[], filter: TrendCountFilter): 
   }))
 }
 
-function graphSvg(filtered: FilteredColumn[]) {
+/**
+ * Size a framed graph is rendered at. Framed SVGs are then scaled to the page
+ * width (keeping their aspect), so they fit horizontally without scrolling.
+ */
+const EXPORT_FRAME: FrameSize = { width: 1200, height: 420 }
+
+/** Hover popup text for a curve: name, then the trend summary lines. */
+function curveTip(name: string, counts: number[], axisLabels: string[]): string {
+  const summary = summarizeTrend(counts)
+  if (!summary) return name
+  return [name, ...trendSummaryLines(summary, (i) => `column ${i + 1} (${axisLabels[i]})`)].join('\n')
+}
+
+function graphSvg(filtered: FilteredColumn[], frame?: FrameSize) {
   const g = layoutTrendGraph(
     filtered.map((f) => f.column.width),
     filtered.map((f) => f.students.length),
+    frame,
   )
   const bottom = g.height - g.padBottom
-  const ticks = GRAPH_TICKS.map((tick) => {
-    const y = g.padTop + (1 - tick) * (g.height - g.padTop - g.padBottom)
+  const ticks = g.scale.ticks.map((tick) => {
+    const y = scaleY(g.scale, tick, g.padTop, g.height - g.padTop - g.padBottom)
     return `<line class="trend-graph__grid" x1="${g.padX}" y1="${y}" x2="${g.width - g.padX}" y2="${y}"/>
-      <text class="trend-graph__tick" x="${g.padX - 10}" y="${y + 4}" text-anchor="end">${Math.round(g.maxCount * tick)}</text>`
+      <text class="trend-graph__tick" x="${g.padX - 10}" y="${y + 4}" text-anchor="end">${formatTick(tick)}</text>`
   }).join('')
+  const columnLines = g.points.map((p) =>
+    `<line class="trend-graph__column-line" x1="${p.x}" y1="${g.padTop}" x2="${p.x}" y2="${bottom}"/>`,
+  ).join('')
+  const polyline = g.points.map((p) => `${p.x},${p.y}`).join(' ')
+  const tip = curveTip('Trend', g.points.map((p) => p.count), filtered.map((f) => f.column.axisLabel))
   const line = g.points.length > 1
-    ? `<polyline class="trend-graph__line" points="${g.points.map((p) => `${p.x},${p.y}`).join(' ')}"/>`
+    ? `<g class="trend-curve"><polyline class="trend-graph__line" points="${polyline}"/>
+        <polyline class="curve-hit" points="${polyline}" data-tip="${esc(tip)}"/></g>`
     : ''
   const points = g.points.map((p, i) => {
     const c = filtered[i].column
-    return `<line class="trend-graph__column-line" x1="${p.x}" y1="${g.padTop}" x2="${p.x}" y2="${bottom}"/>
-      <circle class="trend-graph__dot" cx="${p.x}" cy="${p.y}" r="6"/>
+    return `<circle class="trend-graph__dot" cx="${p.x}" cy="${p.y}" r="6"><title>${esc(`${c.label}: ${p.count} students`)}</title></circle>
       <text class="trend-graph__count" x="${p.x}" y="${p.y - 12}" text-anchor="middle">${p.count}</text>
       <text class="trend-graph__x-label" x="${p.x}" y="${g.height - 54}" text-anchor="middle">${esc(c.axisLabel)}</text>
       <text class="trend-graph__x-term" x="${p.x}" y="${g.height - 36}" text-anchor="middle">${esc(c.axisTerm)}</text>`
@@ -145,9 +184,16 @@ function graphSvg(filtered: FilteredColumn[]) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${g.width}" height="${g.height}" viewBox="0 0 ${g.width} ${g.height}">
     <line class="trend-graph__axis" x1="${g.padX}" y1="${bottom}" x2="${g.width - g.padX}" y2="${bottom}"/>
     <line class="trend-graph__axis" x1="${g.padX}" y1="${g.padTop}" x2="${g.padX}" y2="${bottom}"/>
-    ${ticks}${line}${points}
+    ${ticks}${columnLines}${line}${points}
   </svg>`
 }
+
+/** Frame / Reset buttons; they switch every graph in their section. */
+const GRAPH_TOOLS_HTML = `<div class="graph-tools">
+  <button type="button" data-view="framed" aria-pressed="false" title="Fit the curves to the graph, horizontally and vertically (F)">Frame</button>
+  <button type="button" data-view="default" title="Back to the default view">Reset</button>
+  <span>Hover a curve for its trend</span>
+</div>`
 
 function columnCardHtml({ column, students: list, comparison, hasPrevious }: FilteredColumn) {
   const meta =
@@ -211,24 +257,46 @@ function combinedSeries(analyses: TrendExportAnalysis[]): CombinedSeries[] {
  * Every analysis overlaid on one graph, column N of each sharing slot N.
  * All series are drawn (each in its own group) so the toggles can show/hide them.
  */
-function combinedSectionHtml(analyses: TrendExportAnalysis[]) {
-  const series = combinedSeries(analyses)
-  const g = layoutCombinedGraph(series)
+/**
+ * Most analyses for which every on/off combination gets its own framed graph
+ * (2^n - 1 of them), so framing fits exactly the curves switched on. Past this,
+ * one framed graph fits all analyses and the toggles just hide curves.
+ */
+const MAX_FRAMED_COMBINATIONS_SERIES = 6
+
+/**
+ * One combined graph. `indices` are the analyses' positions in the full list
+ * (used for `data-series`, which the toggles target); `hidden` hides a group.
+ */
+function combinedSvg(
+  series: CombinedSeries[],
+  indices: number[],
+  frame: FrameSize | undefined,
+  hidden: (index: number) => boolean,
+) {
+  const g = layoutCombinedGraph(series, frame)
   const bottom = g.height - g.padBottom
   const plotHeight = bottom - g.padTop
-  const ticks = GRAPH_TICKS.map((tick) => {
-    const y = g.padTop + (1 - tick) * plotHeight
+  const ticks = g.scale.ticks.map((tick) => {
+    const y = scaleY(g.scale, tick, g.padTop, plotHeight)
     return `<line class="trend-graph__grid" x1="${g.padX}" y1="${y}" x2="${g.width - g.padX}" y2="${y}"/>
-      <text class="trend-graph__tick" x="${g.padX - 10}" y="${y + 4}" text-anchor="end">${Math.round(g.maxCount * tick)}</text>`
+      <text class="trend-graph__tick" x="${g.padX - 10}" y="${y + 4}" text-anchor="end">${formatTick(tick)}</text>`
   }).join('')
   const slots = g.slotXs.map((x, i) =>
     `<line class="trend-graph__column-line" x1="${x}" y1="${g.padTop}" x2="${x}" y2="${bottom}"/>
      <text class="trend-graph__x-term" x="${x}" y="${bottom + 14}" text-anchor="middle">${i + 1}</text>`,
   ).join('')
   const groups = series.map((s, si) => {
-    const points = g.series[si].points
+    const { points, label } = g.series[si]
+    const tip = esc(curveTip(s.name, s.columns.map((c) => c.count), s.columns.map((c) => c.axisLabel)))
+    const tipAttrs = `data-tip="${tip}" data-tip-color="${esc(s.color)}"`
+    const polyline = points.map((p) => `${p.x},${p.y}`).join(' ')
     const line = points.length > 1
-      ? `<polyline class="combined__line" points="${points.map((p) => `${p.x},${p.y}`).join(' ')}"/>`
+      ? `<polyline class="combined__line" points="${polyline}"/>
+        <polyline class="curve-hit" points="${polyline}" ${tipAttrs}/>`
+      : ''
+    const curveLabel = label
+      ? `<text class="combined__label" x="${label.x}" y="${label.y}" ${tipAttrs}>${esc(label.text)}</text>`
       : ''
     const marks = points.map((p, ci) => {
       const c = s.columns[ci]
@@ -237,9 +305,44 @@ function combinedSectionHtml(analyses: TrendExportAnalysis[]) {
         <text class="combined__count" x="${p.x + 8}" y="${p.y - 8}">${p.count}</text>
         <text class="combined__x-label" x="${p.x}" y="${g.labelTop + si * g.labelRowHeight}" text-anchor="middle"><title>${esc(tip)}</title>${esc(c.axisLabel)}</text>`
     }).join('')
-    const hidden = analyses[si].inCombined ? '' : ' style="display:none"'
-    return `<g data-series="${si}" color="${esc(s.color)}"${hidden}>${line}${marks}</g>`
+    const style = hidden(indices[si]) ? ' style="display:none"' : ''
+    return `<g data-series="${indices[si]}" color="${esc(s.color)}"${style}>${line}${curveLabel}${marks}</g>`
   }).join('')
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${g.width}" height="${g.height}" viewBox="0 0 ${g.width} ${g.height}">
+      <line class="trend-graph__axis" x1="${g.padX}" y1="${bottom}" x2="${g.width - g.padX}" y2="${bottom}"/>
+      <line class="trend-graph__axis" x1="${g.padX}" y1="${g.padTop}" x2="${g.padX}" y2="${bottom}"/>
+      ${ticks}${slots}${groups}
+    </svg>`
+}
+
+function initialMask(analyses: TrendExportAnalysis[]): number {
+  return analyses.reduce((mask, a, i) => (a.inCombined ? mask | (1 << i) : mask), 0)
+}
+
+/** Framed combined graphs: one per on/off combination (see MAX_FRAMED_COMBINATIONS_SERIES). */
+function framedCombinedHtml(analyses: TrendExportAnalysis[], series: CombinedSeries[]) {
+  const all = series.map((_, i) => i)
+  if (series.length > MAX_FRAMED_COMBINATIONS_SERIES) {
+    return `<div data-mask="all">${combinedSvg(series, all, EXPORT_FRAME, (i) => !analyses[i].inCombined)}</div>`
+  }
+  const start = initialMask(analyses)
+  const variants = [`<div data-mask="0"${start === 0 ? '' : ' hidden'}><div class="empty">Turn on at least one analysis above.</div></div>`]
+  for (let mask = 1; mask < 1 << series.length; mask++) {
+    const indices = all.filter((i) => mask & (1 << i))
+    const svg = combinedSvg(indices.map((i) => series[i]), indices, EXPORT_FRAME, () => false)
+    variants.push(`<div data-mask="${mask}"${mask === start ? '' : ' hidden'}>${svg}</div>`)
+  }
+  return variants.join('')
+}
+
+/**
+ * Every analysis overlaid on one graph, column N of each sharing slot N.
+ * The default graph draws all series (each in its own group) so the toggles
+ * can show/hide them; the framed graphs are pre-rendered per combination.
+ */
+function combinedSectionHtml(analyses: TrendExportAnalysis[]) {
+  const series = combinedSeries(analyses)
+  const defaultSvg = combinedSvg(series, series.map((_, i) => i), undefined, (i) => !analyses[i].inCombined)
   const toggles = analyses.map((a, i) =>
     `<label class="combined__toggle" style="--series-color: ${esc(a.color)}">
       <input type="checkbox" data-series-toggle="${i}"${a.inCombined ? ' checked' : ''}>
@@ -250,11 +353,9 @@ function combinedSectionHtml(analyses: TrendExportAnalysis[]) {
     <div class="analysis__head"><h2>Combined</h2></div>
     <div class="combined__toggles">${toggles}</div>
     <div class="combined__note">Columns are matched by position. Each analysis is counted with its own Count setting.</div>
-    <div class="graph"><svg xmlns="http://www.w3.org/2000/svg" width="${g.width}" height="${g.height}" viewBox="0 0 ${g.width} ${g.height}">
-      <line class="trend-graph__axis" x1="${g.padX}" y1="${bottom}" x2="${g.width - g.padX}" y2="${bottom}"/>
-      <line class="trend-graph__axis" x1="${g.padX}" y1="${g.padTop}" x2="${g.padX}" y2="${bottom}"/>
-      ${ticks}${slots}${groups}
-    </svg></div>
+    ${GRAPH_TOOLS_HTML}
+    <div class="graph graph--default">${defaultSvg}</div>
+    <div class="graph graph--framed" data-combined-framed>${framedCombinedHtml(analyses, series)}</div>
   </section>`
 }
 
@@ -265,7 +366,9 @@ function analysisVariantsHtml(data: TrendExportData) {
     .map((filter) => {
       const filtered = filterColumns(data.columns, filter)
       return `<div class="variant" data-filter="${filter}"${filter === data.countFilter ? '' : ' hidden'}>
-        <div class="graph">${graphSvg(filtered)}</div>
+        ${GRAPH_TOOLS_HTML}
+        <div class="graph graph--default">${graphSvg(filtered)}</div>
+        <div class="graph graph--framed">${graphSvg(filtered, EXPORT_FRAME)}</div>
         ${summaryTableHtml(filtered)}
         <div class="columns">${filtered.map(columnCardHtml).join('')}</div>
       </div>`
@@ -291,9 +394,71 @@ document.querySelectorAll('select[data-count-filter]').forEach(function (select)
 });
 document.querySelectorAll('input[data-series-toggle]').forEach(function (box) {
   box.addEventListener('change', function () {
-    var group = document.querySelector('g[data-series="' + box.getAttribute('data-series-toggle') + '"]');
-    if (group) group.style.display = box.checked ? '' : 'none';
+    var section = box.closest('section.analysis');
+    var index = box.getAttribute('data-series-toggle');
+    // Default graph (and the single "all" framed graph): hide the group.
+    section.querySelectorAll('.graph--default g[data-series="' + index + '"], [data-mask="all"] g[data-series="' + index + '"]')
+      .forEach(function (group) { group.style.display = box.checked ? '' : 'none'; });
+    // Framed graphs: show the one pre-rendered for the switched-on combination.
+    var mask = 0;
+    section.querySelectorAll('input[data-series-toggle]').forEach(function (b) {
+      if (b.checked) mask |= 1 << Number(b.getAttribute('data-series-toggle'));
+    });
+    section.querySelectorAll('[data-combined-framed] > [data-mask]').forEach(function (v) {
+      if (v.getAttribute('data-mask') !== 'all') v.hidden = Number(v.getAttribute('data-mask')) !== mask;
+    });
   });
+});
+
+// Frame / Reset: switch every graph in the section between its default and framed view.
+function setView(section, view) {
+  section.setAttribute('data-view', view);
+  section.querySelectorAll('.graph-tools button[data-view="framed"]').forEach(function (b) {
+    b.setAttribute('aria-pressed', view === 'framed' ? 'true' : 'false');
+  });
+}
+document.querySelectorAll('.graph-tools button[data-view]').forEach(function (button) {
+  button.addEventListener('click', function () {
+    setView(button.closest('section.analysis'), button.getAttribute('data-view'));
+  });
+});
+// F frames the section under the cursor, like a graph editor's Frame All.
+var hoveredSection = null;
+document.addEventListener('mouseover', function (e) {
+  hoveredSection = e.target.closest ? e.target.closest('section.analysis') : null;
+});
+document.addEventListener('keydown', function (e) {
+  if ((e.key === 'f' || e.key === 'F') && hoveredSection && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) {
+    setView(hoveredSection, 'framed');
+  }
+});
+
+// Curve hover popup: name and trend summary, following the cursor.
+var tip = document.createElement('div');
+tip.className = 'tip';
+tip.hidden = true;
+document.body.appendChild(tip);
+document.addEventListener('mousemove', function (e) {
+  var target = e.target.closest ? e.target.closest('[data-tip]') : null;
+  if (!target) { tip.hidden = true; return; }
+  var lines = target.getAttribute('data-tip').split('\\n');
+  tip.innerHTML = '';
+  var title = document.createElement('div');
+  title.className = 'tip__title';
+  title.textContent = lines[0];
+  var color = target.getAttribute('data-tip-color');
+  if (color) title.style.color = color;
+  tip.appendChild(title);
+  lines.slice(1).forEach(function (line) {
+    var row = document.createElement('div');
+    row.textContent = line;
+    tip.appendChild(row);
+  });
+  tip.hidden = false;
+  var left = e.clientX + 14;
+  if (left + 260 > window.innerWidth) left = e.clientX - 14 - 260;
+  tip.style.left = Math.max(4, left) + 'px';
+  tip.style.top = Math.max(4, Math.min(e.clientY + 14, window.innerHeight - tip.offsetHeight - 4)) + 'px';
 });
 `
 
