@@ -3,7 +3,6 @@ import { downloadTrendSnapshot } from '../../lib/trendExport'
 import { ANALYSIS_COLORS, defaultAnalysisColor, seriesColumns, type CombinedSeries } from '../../lib/trendData'
 import { buildTrendConfig, downloadTrendConfig, parseTrendConfig } from '../../lib/sessionPersistence'
 import { CombinedTrendView } from './CombinedTrendView'
-import { LoadProgressModal } from './LoadProgressModal'
 import { uniqueId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
 import type { TrendColumnSnapshot, TrendCountFilter } from '../../store/appStore'
@@ -167,7 +166,7 @@ export function TrendAnalysisTabs() {
   const handleLoadConfig = async (file: File | undefined) => {
     if (!file) return
     if (configInputRef.current) configInputRef.current.value = ''
-    startLoadProgress(`Loading ${file.name}`)
+    startLoadProgress(`Loading ${file.name}`, 'trend')
     try {
       const session = parseTrendConfig(await file.text())
       const analyses = session.trend.analyses ?? []
@@ -366,7 +365,7 @@ export function TrendAnalysisTabs() {
             Download Analysis
           </button>
         </div>
-        <LoadProgressModal />
+
       </div>
       <div className="trend-tabs__content">
         <div className={`trend-tabs__panel${activeId === COMBINED_ID ? ' trend-tabs__panel--active' : ''}`}>

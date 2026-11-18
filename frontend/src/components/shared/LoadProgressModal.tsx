@@ -1,31 +1,39 @@
 import { useEffect } from 'react'
-import { LOAD_STAGES, useAppStore, type LoadProgress, type LoadStage } from '../../store/appStore'
+import { useAppStore, type LoadKind, type LoadProgress, type LoadStage } from '../../store/appStore'
 import '../CourseSearch/PresetEditorModal.css'
 
-const STEP_LABELS: Record<Exclude<LoadStage, 'done'>, string> = {
+type Step = Exclude<LoadStage, 'done'>
+
+const STEP_LABELS: Record<Step, string> = {
   reading: 'Read configuration file',
   searching: 'Search courses',
   courses: 'Populate course list',
   tabs: 'Rebuild analysis tabs',
   columns: 'Load columns',
+  graph: 'Rebuild graph nodes and connections',
 }
 
-const STEPS = LOAD_STAGES.filter((s): s is Exclude<LoadStage, 'done'> => s !== 'done')
+/** Steps each kind of load goes through, in order. */
+const STEPS: Record<LoadKind, Step[]> = {
+  trend: ['reading', 'searching', 'courses', 'tabs', 'columns'],
+  graph: ['reading', 'searching', 'courses', 'graph'],
+}
 
 /** Overall progress, 0..1: finished steps plus the share of columns loaded. */
 export function loadFraction(progress: LoadProgress): number {
   if (progress.stage === 'done') return 1
-  const index = STEPS.indexOf(progress.stage)
+  const steps = STEPS[progress.kind]
+  const index = steps.indexOf(progress.stage)
   const partial = progress.stage === 'columns' && progress.columnsTotal > 0
     ? progress.columnsDone / progress.columnsTotal
     : 0
-  return (index + partial) / STEPS.length
+  return (index + partial) / steps.length
 }
 
 /** Auto-close delay after a load that finished without problems. */
 const AUTO_CLOSE_MS = 1200
 
-/** Pop-up showing each step of loading a Trend Analysis configuration. */
+/** Pop-up showing each step of loading a Trend Analysis or Aggregation Graph configuration. */
 export function LoadProgressModal() {
   const progress = useAppStore((s) => s.loadProgress)
   const close = useAppStore((s) => s.closeLoadProgress)
@@ -40,7 +48,8 @@ export function LoadProgressModal() {
   if (!progress) return null
   const failed = Boolean(progress.error)
   const done = progress.stage === 'done'
-  const currentIndex = progress.stage === 'done' ? STEPS.length : STEPS.indexOf(progress.stage)
+  const steps = STEPS[progress.kind]
+  const currentIndex = progress.stage === 'done' ? steps.length : steps.indexOf(progress.stage)
   const percent = Math.round(loadFraction(progress) * 100)
 
   return (
@@ -62,7 +71,7 @@ export function LoadProgressModal() {
         </div>
 
         <ol className="load-progress__steps">
-          {STEPS.map((step, i) => {
+          {steps.map((step, i) => {
             const state = i < currentIndex ? 'done' : i === currentIndex ? (failed ? 'error' : 'active') : 'pending'
             return (
               <li key={step} className={`load-progress__step load-progress__step--${state}`}>

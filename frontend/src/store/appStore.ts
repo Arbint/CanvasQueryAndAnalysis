@@ -54,13 +54,19 @@ export interface TrendAnalysisSnapshot {
   inCombined?: boolean
 }
 
-/** Stages of loading a session or Trend Analysis configuration, in order. */
-export const LOAD_STAGES = ['reading', 'searching', 'courses', 'tabs', 'columns', 'done'] as const
-export type LoadStage = (typeof LOAD_STAGES)[number]
+/**
+ * Stages of loading a configuration file. A Trend Analysis load goes through
+ * tabs and columns; an Aggregation Graph load through graph.
+ */
+export type LoadStage = 'reading' | 'searching' | 'courses' | 'tabs' | 'columns' | 'graph' | 'done'
 
-/** Shown in the loading pop-up while a session or configuration file loads. */
+/** Which configuration is loading: decides the steps the pop-up lists. */
+export type LoadKind = 'trend' | 'graph'
+
+/** Shown in the loading pop-up while a configuration file loads. */
 export interface LoadProgress {
   title: string
+  kind: LoadKind
   stage: LoadStage
   /** What is happening right now. */
   message: string
@@ -84,7 +90,8 @@ export interface SavedSession {
   }
   /** Absent in Trend Analysis configuration files: loading one leaves the graph as it is. */
   graph?: GraphSnapshot
-  trend: {
+  /** Absent in Aggregation Graph configuration files: loading one leaves Trend Analysis as it is. */
+  trend?: {
     /** Multiple independent analyses (current format). */
     analyses?: TrendAnalysisSnapshot[]
     /** Single analysis (legacy session files). */
@@ -132,7 +139,7 @@ interface AppStore {
 
   /** Loading pop-up state; null when no explicit load is showing. */
   loadProgress: LoadProgress | null
-  startLoadProgress: (title: string) => void
+  startLoadProgress: (title: string, kind: LoadKind) => void
   /** Updates the pop-up; does nothing when none is showing (e.g. the silent auto-save restore). */
   updateLoadProgress: (update: Partial<LoadProgress> | ((current: LoadProgress) => Partial<LoadProgress>)) => void
   closeLoadProgress: () => void
@@ -182,9 +189,10 @@ export const useAppStore = create<AppStore>()((set) => ({
   setLoadStatus: (status) => set({ loadStatus: status }),
 
   loadProgress: null,
-  startLoadProgress: (title) => set({
+  startLoadProgress: (title, kind) => set({
     loadProgress: {
       title,
+      kind,
       stage: 'reading',
       message: 'Reading file...',
       columnsDone: 0,

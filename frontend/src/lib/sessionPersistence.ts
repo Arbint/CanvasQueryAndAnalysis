@@ -65,8 +65,12 @@ export function cleanTrendAnalyses(analyses: TrendAnalysisSnapshot[]): TrendAnal
   }))
 }
 
-/** Reads trend analyses from a session, accepting the legacy single-analysis format. */
-export function sessionTrendAnalyses(session: SavedSession): TrendAnalysisSnapshot[] {
+/**
+ * Reads trend analyses from a session, accepting the legacy single-analysis
+ * format. Null when the session has no trend part (a graph configuration).
+ */
+export function sessionTrendAnalyses(session: SavedSession): TrendAnalysisSnapshot[] | null {
+  if (!session.trend) return null
   if (session.trend.analyses) return session.trend.analyses
   if (session.trend.columns) return [{ id: 'trend-analysis-1', name: 'Analysis 1', columns: session.trend.columns }]
   return []
@@ -83,10 +87,6 @@ function downloadJson(data: unknown, fileName: string) {
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
-
-export function downloadSession(session: SavedSession) {
-  downloadJson(session, `canvas-query-session-${today()}.json`)
-}
 
 // --- Trend Analysis configuration files ---
 // Just the course search (so the courses can be found again) and the trend
@@ -144,6 +144,9 @@ export function parseTrendConfig(text: string): SavedSession {
   } catch {
     throw new Error('Not a JSON file')
   }
+  if (isRecord(parsed) && parsed.kind === GRAPH_CONFIG_KIND) {
+    throw new Error('This is an Aggregation Graph configuration: load it from the Aggregation Graph')
+  }
   if (!isRecord(parsed) || parsed.version !== 1 || !isCourseSearch(parsed.courseSearch) || !isRecord(parsed.trend)) {
     throw new Error('Not a Trend Analysis configuration or session file')
   }
@@ -158,15 +161,70 @@ export function parseTrendConfig(text: string): SavedSession {
   }
 }
 
-export async function readSessionFile(file: File): Promise<SavedSession> {
-  const text = await file.text()
-  const parsed = JSON.parse(text) as SavedSession & { kind?: string }
-  // A Trend Analysis configuration loads too: it just leaves the graph alone.
-  if (parsed.kind === TREND_CONFIG_KIND) return parseTrendConfig(text)
-  if (parsed.version !== 1 || !parsed.courseSearch || !parsed.graph || !parsed.trend) {
-    throw new Error('Unsupported session file')
+// --- Aggregation Graph configuration files ---
+// The course search (so the courses can be found again) and the graph's nodes
+// and connections; loading one leaves Trend Analysis alone.
+
+export const GRAPH_CONFIG_KIND = 'canvas-query-graph-config'
+
+export interface GraphConfigFile {
+  kind: typeof GRAPH_CONFIG_KIND
+  version: 1
+  savedAt: string
+  courseSearch: SavedSession['courseSearch']
+  graph: GraphSnapshot
+}
+
+export function buildGraphConfig(
+  courseSearch: SavedSession['courseSearch'],
+  graph: GraphSnapshot,
+  savedAt = new Date(),
+): GraphConfigFile {
+  return {
+    kind: GRAPH_CONFIG_KIND,
+    version: 1,
+    savedAt: savedAt.toISOString(),
+    courseSearch: {
+      selectedAccountId: courseSearch.selectedAccountId,
+      selectedTermIds: [...courseSearch.selectedTermIds],
+      keywords: [...courseSearch.keywords],
+    },
+    graph: cleanGraphSnapshot(graph),
   }
-  return parsed
+}
+
+export function downloadGraphConfig(config: GraphConfigFile) {
+  downloadJson(config, `aggregation-graph-config-${today()}.json`)
+}
+
+/**
+ * Parses an Aggregation Graph configuration file. A full session file (from
+ * the old global Save) is also accepted; only its course search and graph
+ * are used. The result is a session without a trend part.
+ */
+export function parseGraphConfig(text: string): SavedSession {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Error('Not a JSON file')
+  }
+  if (isRecord(parsed) && parsed.kind === TREND_CONFIG_KIND) {
+    throw new Error('This is a Trend Analysis configuration: load it from Trend Analysis')
+  }
+  const graph = isRecord(parsed) ? parsed.graph : undefined
+  if (
+    !isRecord(parsed) || parsed.version !== 1 || !isCourseSearch(parsed.courseSearch) ||
+    !isRecord(graph) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)
+  ) {
+    throw new Error('Not an Aggregation Graph configuration or session file')
+  }
+  return {
+    version: 1,
+    savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : new Date().toISOString(),
+    courseSearch: parsed.courseSearch,
+    graph: cleanGraphSnapshot(graph as unknown as GraphSnapshot),
+  }
 }
 
 // --- Auto-save ---
@@ -202,6 +260,6 @@ export function isEmptySession(session: SavedSession): boolean {
   return (
     !session.courseSearch.selectedAccountId &&
     (session.graph?.nodes.length ?? 0) === 0 &&
-    analyses.every((a) => a.columns.every((c) => !c.courseId && c.mode === 'course'))
+    (analyses ?? []).every((a) => a.columns.every((c) => !c.courseId && c.mode === 'course'))
   )
 }
