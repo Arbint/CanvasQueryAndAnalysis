@@ -51,6 +51,9 @@ export function cleanTrendColumns(columns: TrendColumnSnapshot[]): TrendColumnSn
     matchedCourseCount: column.matchedCourseCount,
     width: column.width,
     ...(column.mode === 'prediction' && column.prediction ? { prediction: { ...column.prediction } } : {}),
+    ...(column.mode === 'graph' && column.graph
+      ? { graph: { id: column.graph.id, name: column.graph.name, graph: cleanGraphSnapshot(column.graph.graph) } }
+      : {}),
   }))
 }
 
@@ -259,7 +262,8 @@ export function isEmptySession(session: SavedSession): boolean {
   const analyses = sessionTrendAnalyses(session)
   return (
     !session.courseSearch.selectedAccountId &&
-    (session.graph?.nodes.length ?? 0) === 0 &&
+    // The Output node is always there, so it doesn't count as work.
+    (session.graph?.nodes.filter((n) => n.type !== 'outputNode').length ?? 0) === 0 &&
     (analyses ?? []).every((a) => a.columns.every((c) => !c.courseId && c.mode === 'course'))
   )
 }

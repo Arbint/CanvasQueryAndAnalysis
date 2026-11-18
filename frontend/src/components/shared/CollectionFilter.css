@@ -358,3 +358,13 @@
   list-style: none;
   margin-left: calc(-1 * var(--space-4));
 }
+
+/* Aggregation graph chip (Trend Analysis graph cards) */
+.graph-chip {
+  border-left-color: var(--color-accent-purple);
+}
+
+.graph-chip__meta {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}

@@ -433,3 +433,59 @@
 .node-graph__config-input {
   display: none;
 }
+
+.node-graph-host {
+  width: 100%;
+  height: 100%;
+}
+
+/* Output node: the graph's single result */
+.node--output {
+  min-width: 200px;
+  border-top: 2px solid var(--color-accent-yellow);
+}
+
+.node__output-panel .node__expand-list {
+  max-height: 180px;
+}
+
+/* Graph editor pop-up (Trend Analysis aggregation graph cards) */
+.graph-editor {
+  width: min(1400px, calc(100vw - 32px));
+  height: calc(100vh - 48px);
+}
+
+.graph-editor__head {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.graph-editor__name {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 420px;
+}
+
+.graph-editor__name input {
+  min-height: 30px;
+}
+
+.graph-editor__hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.graph-editor__warn {
+  color: var(--color-accent-yellow);
+}
+
+.graph-editor__canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+}

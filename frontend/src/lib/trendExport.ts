@@ -246,7 +246,7 @@ function predictionCardHtml(column: TrendExportColumn, prediction: PredictionRes
 function columnCardHtml({ column, students: list, comparison, hasPrevious, prediction }: FilteredColumn) {
   if (prediction) return predictionCardHtml(column, prediction)
   const meta =
-    column.mode === 'collection'
+    column.mode === 'collection' || column.mode === 'graph'
       ? `<div><span>Courses</span><strong>${column.matchedCourseCount}</strong></div>`
       : `<div><span>Term</span><strong>${esc(column.term || '—')}</strong></div>
          <div><span>Time</span><strong>${esc(column.meetingTime ?? 'TBD')}</strong></div>
@@ -260,7 +260,7 @@ function columnCardHtml({ column, students: list, comparison, hasPrevious, predi
     ? `<details><summary class="lost">Lost from previous (${comparison.lost.length})</summary>${studentListHtml(comparison.lost)}</details>
        <details><summary class="added">New since previous (${comparison.added.length})</summary>${studentListHtml(comparison.added)}</details>`
     : ''
-  return `<div class="column${column.mode === 'collection' ? ' column--collection' : ''}">
+  return `<div class="column${column.mode === 'collection' || column.mode === 'graph' ? ' column--collection' : ''}">
     <div class="column__head"><span class="column__number">${column.number}</span><span class="column__title">${esc(column.label)}</span></div>
     <div class="column__meta"><div><span>Students</span><strong>${list.length}</strong></div>${meta}</div>
     ${students}
@@ -274,7 +274,7 @@ function summaryTableHtml(filtered: FilteredColumn[]) {
       ({ column: c, count, prediction, comparison, hasPrevious }) => `<tr${prediction ? ' class="row--predicted"' : ''}>
         <td>${c.number}</td>
         <td>${esc(c.label)}</td>
-        <td>${esc(prediction ? 'Prediction' : c.mode === 'collection' ? `Collection (${c.term})` : c.term || '—')}</td>
+        <td>${esc(prediction ? 'Prediction' : c.mode === 'collection' ? `Collection (${c.term})` : c.mode === 'graph' ? `Aggregation graph (${c.term})` : c.term || '—')}</td>
         <td class="num">${prediction ? `${count} (predicted)` : count}</td>
         <td class="num">${hasPrevious ? comparison.retained.length : '—'}</td>
         <td class="num lost">${hasPrevious ? comparison.lost.length : '—'}</td>

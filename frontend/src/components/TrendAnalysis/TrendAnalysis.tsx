@@ -5,6 +5,9 @@ import { union } from '../../lib/setOperations'
 import { uniqueId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
 import { useFilterLibrary } from '../../store/filterLibraryStore'
+import { resolveGraphRef, useGraphLibrary, type AggregationGraphRef } from '../../store/graphLibraryStore'
+import { evaluateGraphStudents, type GraphScope } from '../../lib/graphEvaluation'
+import { GraphPicker } from './GraphPicker'
 import {
   courseMatchesFilters,
   emptyCourseCollectionFilters,
@@ -51,6 +54,10 @@ interface TrendColumn {
   mode: TrendColumnMode
   /** Used by 'prediction' columns; kept when switching modes so it isn't lost. */
   prediction: PredictionSettings
+  /** Used by 'graph' columns (Terms / Department come from `collection`); kept when switching modes. */
+  graph: AggregationGraphRef | null
+  /** What the students were last collected from (graph logic + scope), to flag a stale card. */
+  collectedKey: string | null
   /** User-defined name; empty means use the automatic label. */
   label: string
   courseId: number | null
@@ -76,6 +83,8 @@ const makeColumn = (): TrendColumn => ({
   id: nextColumnId(),
   mode: 'course',
   prediction: defaultPredictionSettings(),
+  graph: null,
+  collectedKey: null,
   label: '',
   courseId: null,
   collection: emptyCourseCollectionFilters(),
@@ -95,6 +104,8 @@ function columnFromSnapshot(snapshot: TrendColumnSnapshot): TrendColumn {
     id: nextColumnId(),
     mode: snapshot.mode,
     prediction: { ...defaultPredictionSettings(), ...snapshot.prediction },
+    graph: snapshot.graph ?? null,
+    collectedKey: null,
     label: snapshot.label ?? '',
     courseId: snapshot.courseId,
     collection: normalizeCollectionFilters(snapshot.collection),
@@ -116,12 +127,120 @@ function columnToSnapshot(column: TrendColumn): TrendColumnSnapshot {
     matchedCourseCount: column.matchedCourseCount,
     width: column.width,
     ...(column.mode === 'prediction' ? { prediction: column.prediction } : {}),
+    ...(column.mode === 'graph' ? { graph: column.graph } : {}),
   }
 }
 
-/** Whether restoring this column fetches students (predictions and empty course columns don't). */
-export function columnNeedsLoad(column: Pick<TrendColumnSnapshot, 'mode' | 'courseId'>): boolean {
-  return column.mode === 'collection' || (column.mode === 'course' && Boolean(column.courseId))
+/** Identifies what a graph card collects from: the graph's logic (not node positions) and its scope. */
+function graphCollectKey(graph: AggregationGraphRef | null, scope: GraphScope): string {
+  if (!graph) return ''
+  return JSON.stringify({
+    nodes: graph.graph.nodes.map((n) => [n.id, n.type, n.data]),
+    edges: graph.graph.edges.map((e) => [e.source, e.sourceHandle, e.target, e.targetHandle]),
+    scope: [scope.selectedTerms, scope.department.trim().toUpperCase()],
+  })
+}
+
+function graphScope(column: Pick<TrendColumn, 'collection'>): GraphScope {
+  return { selectedTerms: column.collection.selectedTerms, department: column.collection.department }
+}
+
+// --- Aggregation graph card UI ---
+
+function GraphCardUI({
+  column,
+  graph,
+  onScopeChange,
+  onGraphChange,
+  onCollect,
+}: {
+  column: TrendColumn
+  /** The card's graph, resolved against the library. */
+  graph: AggregationGraphRef | null
+  onScopeChange: (collection: CourseCollectionFilters) => void
+  onGraphChange: (graph: AggregationGraphRef) => void
+  onCollect: () => void
+}) {
+  const courses = useAppStore((s) => s.courses)
+  const availableTerms = useMemo(() => [...new Set(courses.map((c) => c.term_name))].sort(), [courses])
+  const { selectedTerms, department } = column.collection
+  const stale = Boolean(graph && column.collectedKey && column.collectedKey !== graphCollectKey(graph, graphScope(column)))
+  const toggleTerm = (term: string) => onScopeChange({
+    ...column.collection,
+    selectedTerms: selectedTerms.includes(term) ? selectedTerms.filter((t) => t !== term) : [...selectedTerms, term],
+  })
+
+  return (
+    <div className="trend-collection-filters trend-graph-card" onDoubleClick={(e) => e.stopPropagation()}>
+      <div className="collection-filter">
+        <div className="collection-filter__label" title="Narrow every Course Collection node in the graph (Course nodes are not affected)">
+          Terms
+        </div>
+        <div className="collection-terms">
+          {availableTerms.length === 0 ? (
+            <span className="collection-empty">Search courses first</span>
+          ) : (
+            availableTerms.map((term) => (
+              <button
+                key={term}
+                className={`collection-term-chip${selectedTerms.includes(term) ? ' collection-term-chip--active' : ''}`}
+                onClick={() => toggleTerm(term)}
+              >
+                {term}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+      <div className="collection-filter">
+        <div className="collection-filter__label" title="Narrow every Course Collection node in the graph (Course nodes are not affected)">
+          Department
+        </div>
+        <input
+          placeholder="e.g. ANGD"
+          value={department}
+          onChange={(e) => onScopeChange({ ...column.collection, department: e.target.value })}
+        />
+      </div>
+      <div className="collection-filter">
+        <div className="collection-filter__label">Aggregation Graph</div>
+        <GraphPicker graph={graph} onChange={onGraphChange} />
+      </div>
+      <div className="collection-collect-row">
+        <span className={`collection-section-label${stale ? ' trend-graph-card__stale' : ''}`}>
+          {stale
+            ? 'Graph or scope changed: Collect to update'
+            : column.collectedKey
+              ? `${column.matchedCourseCount} course${column.matchedCourseCount === 1 ? '' : 's'} used`
+              : graph ? 'Not collected yet' : 'Pick or create a graph'}
+        </span>
+        <button className="collection-collect-btn" onClick={onCollect} disabled={!graph || column.loading}>
+          {column.loading ? 'Loading…' : 'Collect'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Whether restoring this column fetches students (predictions and empty course / graph columns don't). */
+export function columnNeedsLoad(column: Pick<TrendColumnSnapshot, 'mode' | 'courseId' | 'graph'>): boolean {
+  return column.mode === 'collection'
+    || (column.mode === 'course' && Boolean(column.courseId))
+    || (column.mode === 'graph' && Boolean(column.graph))
+}
+
+const columnModeLabels: Record<TrendColumnMode, string> = {
+  course: 'Course',
+  collection: 'Collection',
+  graph: 'Aggregation Graph',
+  prediction: 'Prediction',
+}
+
+const columnModeHints: Record<TrendColumnMode, string> = {
+  course: 'One course',
+  collection: 'Every course matching the filters',
+  graph: 'The Output of a saved aggregation graph',
+  prediction: 'Project the next count from the columns before this one',
 }
 
 // --- Prediction settings UI ---
@@ -282,6 +401,13 @@ function truncate(value: string, max = 24): string {
 /** Label generated from the column's course or collection filters. */
 function autoLabel(column: TrendColumn, course: Course | null): string {
   if (column.mode === 'prediction') return 'Prediction'
+  if (column.mode === 'graph') {
+    const name = resolveGraphRef(column.graph, useGraphLibrary.getState().graphs)?.name ?? 'Aggregation Graph'
+    const { department, selectedTerms } = column.collection
+    const scope = [department.trim().toUpperCase(), selectedTerms.length === 1 ? selectedTerms[0] : selectedTerms.length > 1 ? `${selectedTerms.length} Terms` : '']
+      .filter(Boolean).join(' ')
+    return scope ? `${name} ${scope}` : name
+  }
   if (column.mode === 'collection') {
     const { department, selectedTerms } = column.collection
     const filterName = resolveCollectionFilters(column.collection, useFilterLibrary.getState().filters).filter?.name
@@ -307,7 +433,7 @@ function axisLabel(column: TrendColumn, course: Course | null): string {
 
 function axisTermLabel(column: TrendColumn, course: Course | null): string {
   if (column.mode === 'prediction') return `Predicted (${predictionMethodLabels[column.prediction.method].toLowerCase()})`
-  if (column.mode === 'collection') {
+  if (column.mode === 'collection' || column.mode === 'graph') {
     return `${column.matchedCourseCount} course${column.matchedCourseCount !== 1 ? 's' : ''}`
   }
   return course?.term_name ?? ''
@@ -369,6 +495,8 @@ export function TrendAnalysis({
 }: TrendAnalysisProps) {
   const courses = useAppStore((s) => s.courses)
   const setActiveStudentList = useAppStore((s) => s.setActiveStudentList)
+  // Re-render when saved graphs change, so cards show their graph's current version.
+  const graphLibrary = useGraphLibrary((s) => s.graphs)
   const [columns, setColumns] = useState<TrendColumn[]>(() => {
     if (!initialColumns || initialColumns.length === 0) return [makeColumn(), makeColumn()]
     return initialColumns.map((snapshot) => {
@@ -446,6 +574,25 @@ export function TrendAnalysis({
             return { ...column, students: await api.getStudents(column.courseId), loading: false }
           } catch (error) {
             return { ...column, loading: false, error: error instanceof Error ? error.message : 'Unable to load students' }
+          }
+        }
+
+        if (column.mode === 'graph') {
+          const graph = resolveGraphRef(column.graph, useGraphLibrary.getState().graphs)
+          if (!graph) return { ...column, loading: false }
+          try {
+            const result = await evaluateGraphStudents(
+              graph.graph, courses, graphScope(column), useFilterLibrary.getState().filters, api.getStudents,
+            )
+            return {
+              ...column,
+              students: result.students,
+              matchedCourseCount: result.courseCount,
+              collectedKey: graphCollectKey(graph, graphScope(column)),
+              loading: false,
+            }
+          } catch (error) {
+            return { ...column, loading: false, error: error instanceof Error ? error.message : 'Failed to run the graph' }
           }
         }
 
@@ -546,7 +693,7 @@ export function TrendAnalysis({
     setColumns((curr) =>
       curr.map((col) =>
         col.id === columnId
-          ? { ...col, mode, courseId: null, students: [], loading: false, error: null, matchedCourseCount: 0 }
+          ? { ...col, mode, courseId: null, students: [], loading: false, error: null, matchedCourseCount: 0, collectedKey: null }
           : col,
       ),
     )
@@ -601,6 +748,45 @@ export function TrendAnalysis({
     }
   }
 
+  /** Runs a graph card's graph (or `graphOverride`, just picked) and takes the Output node's students. */
+  const collectGraph = async (columnId: string, graphOverride?: AggregationGraphRef) => {
+    const column = columns.find((col) => col.id === columnId)
+    if (!column) return
+    const graph = graphOverride ?? resolveGraphRef(column.graph, useGraphLibrary.getState().graphs)
+    if (!graph) return
+    const scope = graphScope(column)
+    if (!collectCacheRef.current[columnId]) collectCacheRef.current[columnId] = {}
+    const cache = collectCacheRef.current[columnId]
+    const getStudents = async (courseId: number) => {
+      if (!(courseId in cache)) cache[courseId] = await api.getStudents(courseId)
+      return cache[courseId]
+    }
+    setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, loading: true, error: null } : col))
+    try {
+      const result = await evaluateGraphStudents(graph.graph, courses, scope, useFilterLibrary.getState().filters, getStudents)
+      setColumns((curr) =>
+        curr.map((col) =>
+          col.id === columnId
+            ? { ...col, students: result.students, matchedCourseCount: result.courseCount, collectedKey: graphCollectKey(graph, scope), loading: false }
+            : col,
+        ),
+      )
+    } catch (err) {
+      setColumns((curr) =>
+        curr.map((col) =>
+          col.id === columnId
+            ? { ...col, loading: false, error: err instanceof Error ? err.message : 'Failed to run the graph' }
+            : col,
+        ),
+      )
+    }
+  }
+
+  const setColumnGraph = (columnId: string, graph: AggregationGraphRef) => {
+    setColumns((curr) => curr.map((col) => col.id === columnId ? { ...col, graph } : col))
+    void collectGraph(columnId, graph)
+  }
+
   const addColumn = () => {
     scrollToEndRef.current = true
     setColumns((curr) => [...curr, makeColumn()])
@@ -617,7 +803,7 @@ export function TrendAnalysis({
     const customLabel = column.label.trim()
     const base = customLabel
       ? `${customLabel}-${compareLabels[kind]}`
-      : column.mode === 'collection'
+      : column.mode === 'collection' || column.mode === 'graph'
         ? `${autoLabel(column, course)}-${compareLabels[kind]}`
         : course
           ? `${course.term_name}-${course.name}-${compareLabels[kind]}`
@@ -862,27 +1048,18 @@ export function TrendAnalysis({
               >
                 <div className="trend-column__header">
                   <span className="trend-column__number">{index + 1}</span>
-                  <div className="trend-column__mode-tabs">
-                    <button
-                      className={`trend-column__tab${column.mode === 'course' ? ' trend-column__tab--active' : ''}`}
-                      onClick={() => setColumnMode(column.id, 'course')}
-                    >
-                      Course
-                    </button>
-                    <button
-                      className={`trend-column__tab${column.mode === 'collection' ? ' trend-column__tab--active' : ''}`}
-                      onClick={() => setColumnMode(column.id, 'collection')}
-                    >
-                      Collection
-                    </button>
-                    <button
-                      className={`trend-column__tab${column.mode === 'prediction' ? ' trend-column__tab--active' : ''}`}
-                      title="Project the next count from the columns before this one"
-                      onClick={() => setColumnMode(column.id, 'prediction')}
-                    >
-                      Prediction
-                    </button>
-                  </div>
+                  <select
+                    className="trend-column__mode-select"
+                    aria-label="Card type"
+                    title={columnModeHints[column.mode]}
+                    value={column.mode}
+                    onChange={(e) => setColumnMode(column.id, e.target.value as TrendColumnMode)}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                  >
+                    {(Object.keys(columnModeLabels) as TrendColumnMode[]).map((mode) => (
+                      <option key={mode} value={mode} title={columnModeHints[mode]}>{columnModeLabels[mode]}</option>
+                    ))}
+                  </select>
                   <button className="trend-column__remove" title="Remove column" onClick={() => removeColumn(column.id)}>
                     x
                   </button>
@@ -904,6 +1081,14 @@ export function TrendAnalysis({
                     onChange={(settings) => setColumnPrediction(column.id, settings)}
                     result={predictions[index]}
                     availableColumns={index}
+                  />
+                ) : column.mode === 'graph' ? (
+                  <GraphCardUI
+                    column={column}
+                    graph={resolveGraphRef(column.graph, graphLibrary)}
+                    onScopeChange={(updated) => setCollectionFilters(column.id, updated)}
+                    onGraphChange={(graph) => setColumnGraph(column.id, graph)}
+                    onCollect={() => void collectGraph(column.id)}
                   />
                 ) : column.mode === 'course' ? (
                   <CourseSelect
@@ -927,7 +1112,7 @@ export function TrendAnalysis({
                     <span>Students</span>
                     <strong>{column.loading ? '...' : visibleStudents[index].length}</strong>
                   </div>
-                  {column.mode === 'collection' ? (
+                  {column.mode === 'collection' || column.mode === 'graph' ? (
                     <div>
                       <span>Courses</span>
                       <strong>{column.matchedCourseCount}</strong>

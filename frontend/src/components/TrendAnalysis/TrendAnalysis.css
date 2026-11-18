@@ -1043,3 +1043,23 @@
   pointer-events: none;
   color: var(--color-text-primary);
 }
+
+/* --- Card type dropdown and aggregation graph cards --- */
+
+.trend-column__mode-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-accent-cyan);
+  font-weight: 600;
+}
+
+.trend-column--graph {
+  border-top: 2px solid var(--color-accent-purple);
+}
+
+.trend-graph-card__stale {
+  color: var(--color-accent-yellow);
+}

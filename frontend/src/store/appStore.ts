@@ -3,6 +3,7 @@ import type { Edge, Node } from '@xyflow/react'
 import type { Course, Student } from '../api/types'
 import type { CollectionFilterRef } from '../lib/courseCollectionFilter'
 import type { PredictionSettings } from '../lib/trendData'
+import type { AggregationGraphRef } from './graphLibraryStore'
 
 export interface CourseSearchSettings {
   selectedTermIds: string[]
@@ -23,8 +24,8 @@ export interface TrendCollectionFilters {
   numberPattern?: string
 }
 
-/** Trend column kinds: one course, a course collection, or a projected count. */
-export type TrendColumnMode = 'course' | 'collection' | 'prediction'
+/** Trend column kinds: one course, a course collection, a saved aggregation graph, or a projected count. */
+export type TrendColumnMode = 'course' | 'collection' | 'graph' | 'prediction'
 
 export interface TrendColumnSnapshot {
   id: string
@@ -37,6 +38,8 @@ export interface TrendColumnSnapshot {
   width: number
   /** Settings of a 'prediction' column. */
   prediction?: PredictionSettings
+  /** The saved aggregation graph of a 'graph' column (its Terms / Department are in `collection`). */
+  graph?: AggregationGraphRef | null
 }
 
 /** Which students a trend analysis counts, by enrollment state. */
