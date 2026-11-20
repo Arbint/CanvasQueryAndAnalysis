@@ -1,0 +1,1 @@
+for the filters in Coruse collection, let's add a option to do a temporary filter instead of having to save every filter created.

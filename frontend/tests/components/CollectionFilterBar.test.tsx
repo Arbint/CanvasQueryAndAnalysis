@@ -86,11 +86,39 @@ describe('CollectionFilterBar', () => {
   it('saves a converted (unsaved) filter into the library when edited', async () => {
     const user = userEvent.setup()
     render(<Harness initial={{ id: null, name: 'Converted filter', expression: '$3***' }} />)
-    expect(screen.getByText('(unsaved)')).toBeInTheDocument()
+    expect(screen.getByText('(temporary)')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Edit filter expression' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(useFilterLibrary.getState().filters).toMatchObject([{ name: 'Converted filter', expression: '$3***' }])
-    expect(screen.queryByText('(unsaved)')).not.toBeInTheDocument()
+    expect(screen.queryByText('(temporary)')).not.toBeInTheDocument()
+  })
+
+  it('applies a temporary filter without saving it to the library', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await user.click(screen.getByRole('button', { name: /Set Filter/ }))
+    await user.click(screen.getByRole('menuitem', { name: /Temporary filter/ }))
+    fireEvent.change(screen.getByLabelText('Filter expression'), { target: { value: '$3***' } })
+    // No name needed to apply.
+    await user.click(screen.getByRole('button', { name: 'Apply without saving' }))
+
+    expect(useFilterLibrary.getState().filters).toEqual([])
+    expect(screen.getByText('Temporary filter')).toBeInTheDocument()
+    expect(screen.getByText('(temporary)')).toBeInTheDocument()
+    expect(screen.getByTitle('$3***')).toBeInTheDocument()
+  })
+
+  it('applies an edited saved expression to this collection only', async () => {
+    useFilterLibrary.setState({ filters: [{ id: 'f1', name: 'Game art', expression: '$2*3*' }] })
+    const user = userEvent.setup()
+    render(<Harness initial={{ id: 'f1', name: 'Game art', expression: '$2*3*' }} />)
+    await user.click(screen.getByRole('button', { name: 'Edit filter expression' }))
+    fireEvent.change(screen.getByLabelText('Filter expression'), { target: { value: '$2*3* and @Jing' } })
+    await user.click(screen.getByRole('button', { name: 'Apply without saving' }))
+
+    expect(useFilterLibrary.getState().filters).toEqual([{ id: 'f1', name: 'Game art', expression: '$2*3*' }])
+    expect(screen.getByText('(temporary)')).toBeInTheDocument()
+    expect(screen.getByTitle('$2*3* and @Jing')).toBeInTheDocument()
   })
 
   it('searches saved expressions by keywords in the name or expression', async () => {
@@ -104,7 +132,7 @@ describe('CollectionFilterBar', () => {
     await user.click(screen.getByRole('button', { name: /Set Filter/ }))
     const search = screen.getByLabelText('Search saved expressions')
     expect(search).toHaveFocus()
-    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toHaveLength(4) // 3 + "New expression"
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toHaveLength(5) // 3 + "New expression" + "Temporary filter"
 
     await user.type(search, '2025 upper')
     expect(screen.getByRole('menuitem', { name: /Upper level/ })).toBeInTheDocument()

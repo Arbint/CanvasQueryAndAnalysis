@@ -18,6 +18,8 @@ interface CollectionFilterBarProps {
 
 type Editing =
   | { kind: 'new' }
+  /** A new expression meant to be applied without saving (Save still adds it to the library). */
+  | { kind: 'temporary' }
   /** Edit a saved expression (from the menu or the bar). */
   | { kind: 'saved'; id: string; name: string; expression: string }
   /** Edit the collection's unsaved expression; saving adds it to the library. */
@@ -98,6 +100,12 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
     setEditing(null)
   }
 
+  /** Applies the expression to this collection only; the library is untouched. */
+  const handleApply = (name: string, expression: string) => {
+    onChange({ id: null, name, expression })
+    setEditing(null)
+  }
+
   const handleDelete = () => {
     if (editing?.kind !== 'saved') return
     if (!window.confirm(`Delete the saved expression "${editing.name}"? Collections using it keep a copy.`)) return
@@ -114,7 +122,7 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
           <div className="fx-chip__text">
             <span className="fx-chip__name">
               {filter.name}
-              {!filter.id && <span className="fx-chip__unsaved"> (unsaved)</span>}
+              {!filter.id && <span className="fx-chip__unsaved" title="Temporary: edit and Save to keep it"> (temporary)</span>}
             </span>
             <code className="fx-chip__expr"><HighlightedExpression source={filter.expression} /></code>
           </div>
@@ -195,18 +203,32 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
           >
             + New expression…
           </button>
+          <button
+            className="fx-menu__new"
+            role="menuitem"
+            onClick={() => {
+              setEditing({ kind: 'temporary' })
+              setMenu(null)
+            }}
+          >
+            + Temporary filter…
+          </button>
         </div>,
         document.body,
       )}
 
       {editing && (
         <FilterExpressionModal
-          title={editing.kind === 'new' ? 'New filter expression' : 'Edit filter expression'}
-          initialName={editing.kind === 'new' ? '' : editing.name}
-          initialExpression={editing.kind === 'new' ? '' : editing.expression}
+          title={editing.kind === 'new' ? 'New filter expression'
+            : editing.kind === 'temporary' ? 'Temporary filter'
+            : 'Edit filter expression'}
+          initialName={editing.kind === 'new' || editing.kind === 'temporary' ? '' : editing.name}
+          initialExpression={editing.kind === 'new' || editing.kind === 'temporary' ? '' : editing.expression}
           onSave={handleSave}
           onCancel={() => setEditing(null)}
           onDelete={editing.kind === 'saved' ? handleDelete : undefined}
+          onApply={handleApply}
+          preferApply={editing.kind === 'temporary' || editing.kind === 'inline'}
         />
       )}
     </div>

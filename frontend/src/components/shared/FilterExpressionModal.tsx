@@ -14,7 +14,14 @@ interface FilterExpressionModalProps {
   onCancel: () => void
   /** Shown for saved expressions: removes it from the library. */
   onDelete?: () => void
+  /** Uses the expression as a temporary filter without adding it to the library. */
+  onApply?: (name: string, expression: string) => void
+  /** Makes Apply the primary action (and Ctrl+Enter); the name becomes optional. */
+  preferApply?: boolean
 }
+
+/** Name given to a temporary filter left unnamed. */
+export const TEMPORARY_FILTER_NAME = 'Temporary filter'
 
 const SNIPPETS: { label: string; text: string; hint: string }[] = [
   { label: '$', text: '$', hint: 'Course code pattern: $2*3* (each * is one digit)' },
@@ -39,6 +46,8 @@ export function FilterExpressionModal({
   onSave,
   onCancel,
   onDelete,
+  onApply,
+  preferApply = false,
 }: FilterExpressionModalProps) {
   const courses = useAppStore((s) => s.courses)
   const [name, setName] = useState(initialName)
@@ -50,7 +59,8 @@ export function FilterExpressionModal({
     () => (compiled.error ? [] : courses.filter((c) => compiled.matches(c))),
     [courses, compiled],
   )
-  const canSave = name.trim().length > 0 && expression.trim().length > 0 && !compiled.error
+  const canApply = expression.trim().length > 0 && !compiled.error
+  const canSave = canApply && name.trim().length > 0
 
   useEffect(() => {
     nameRef.current?.focus()
@@ -59,6 +69,12 @@ export function FilterExpressionModal({
   const save = () => {
     if (canSave) onSave(name.trim(), expression.trim())
   }
+
+  const apply = () => {
+    if (canApply && onApply) onApply(name.trim() || TEMPORARY_FILTER_NAME, expression.trim())
+  }
+
+  const primary = preferApply && onApply ? apply : save
 
   const insert = (text: string) => {
     const area = textareaRef.current
@@ -89,7 +105,7 @@ export function FilterExpressionModal({
       onKeyDown={(e) => {
         stop(e)
         if (e.key === 'Escape') onCancel()
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save()
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) primary()
       }}
     >
       <div className="preset-modal fx-modal" role="dialog" aria-modal="true" aria-label={title}>
@@ -101,9 +117,9 @@ export function FilterExpressionModal({
             ref={nameRef}
             className="preset-modal__name"
             value={name}
-            placeholder="e.g. Upper-level game art, 2025"
+            placeholder={preferApply && onApply ? 'Optional unless you save it' : 'e.g. Upper-level game art, 2025'}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') save() }}
+            onKeyDown={(e) => { if (e.key === 'Enter') primary() }}
           />
         </label>
 
@@ -167,7 +183,24 @@ export function FilterExpressionModal({
             <button className="btn btn--secondary fx-modal__delete" onClick={onDelete}>Delete</button>
           )}
           <button className="btn btn--secondary" onClick={onCancel}>Cancel</button>
-          <button className="btn btn--primary" onClick={save} disabled={!canSave} title="Save (Ctrl+Enter)">Save</button>
+          {onApply && (
+            <button
+              className={`btn ${preferApply ? 'btn--primary' : 'btn--secondary'}`}
+              onClick={apply}
+              disabled={!canApply}
+              title={`Use this filter now without adding it to your saved expressions${preferApply ? ' (Ctrl+Enter)' : ''}`}
+            >
+              Apply without saving
+            </button>
+          )}
+          <button
+            className={`btn ${preferApply && onApply ? 'btn--secondary' : 'btn--primary'}`}
+            onClick={save}
+            disabled={!canSave}
+            title={preferApply && onApply ? 'Save to your expressions and apply' : 'Save (Ctrl+Enter)'}
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>,
