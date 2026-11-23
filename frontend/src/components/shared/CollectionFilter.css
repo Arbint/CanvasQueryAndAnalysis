@@ -137,7 +137,7 @@
   top: -4px;
   z-index: 1;
   flex: 0 0 auto;
-  margin-bottom: 4px;
+  margin: 4px 0;
   box-shadow: 0 -4px 0 var(--color-bg-elevated);
   padding: 4px var(--space-2);
   font-size: var(--font-size-sm);
@@ -190,11 +190,12 @@
   max-width: 100%;
 }
 
+/* Create actions sit at the top so they stay reachable however long the list is. */
 .fx-menu__new {
-  margin-top: 4px;
+  flex: 0 0 auto;
   padding: 6px var(--space-2);
   border: none;
-  border-top: 1px solid var(--color-surface-border);
+  border-bottom: 1px solid var(--color-surface-border);
   border-radius: 0;
   background: none;
   color: var(--color-accent-green);

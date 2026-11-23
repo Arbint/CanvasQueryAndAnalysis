@@ -42,7 +42,7 @@ const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
   const library = useGraphLibrary((s) => s.graphs)
   const saveGraph = useGraphLibrary((s) => s.saveGraph)
-  const [menu, setMenu] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [menu, setMenu] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null)
   const [query, setQuery] = useState('')
   const matches = library.filter((g) => matchesKeywords(query, ...graphSearchText(g)))
   const [editing, setEditing] = useState<Editing | null>(null)
@@ -78,7 +78,9 @@ export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
     const width = Math.max(280, rect.width)
     const left = Math.min(rect.left, window.innerWidth - width - 8)
     setQuery('')
-    setMenu({ left: Math.max(8, left), top: rect.bottom + 4, width })
+    // Cap the height to the room below the button so the menu never runs off-screen.
+    const top = rect.bottom + 4
+    setMenu({ left: Math.max(8, left), top, width, maxHeight: Math.max(120, Math.min(320, window.innerHeight - top - 8)) })
   }
 
   const pick = (g: SavedAggregationGraph) => {
@@ -132,7 +134,7 @@ export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
           ref={menuRef}
           className="fx-menu"
           role="menu"
-          style={{ left: menu.left, top: menu.top, width: menu.width }}
+          style={{ left: menu.left, top: menu.top, width: menu.width, maxHeight: menu.maxHeight }}
           onPointerDown={stop}
           onMouseDown={stop}
           onClick={stop}
@@ -142,6 +144,9 @@ export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
             if (e.key === 'Escape') setMenu(null)
           }}
         >
+          <button className="fx-menu__new" role="menuitem" onClick={() => open({ kind: 'new' })}>
+            + New graph…
+          </button>
           {library.length > 0 && (
             <input
               className="fx-menu__search"
@@ -192,9 +197,6 @@ export function GraphPicker({ graph, onChange, scope }: GraphPickerProps) {
               </div>
             ))
           )}
-          <button className="fx-menu__new" role="menuitem" onClick={() => open({ kind: 'new' })}>
-            + New graph…
-          </button>
         </div>,
         document.body,
       )}

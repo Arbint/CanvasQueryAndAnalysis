@@ -35,7 +35,7 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
   const library = useFilterLibrary((s) => s.filters)
   const saveFilter = useFilterLibrary((s) => s.saveFilter)
   const deleteFilter = useFilterLibrary((s) => s.deleteFilter)
-  const [menu, setMenu] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [menu, setMenu] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null)
   const [query, setQuery] = useState('')
   const matches = library.filter((f) => matchesKeywords(query, f.name, f.expression))
   const [editing, setEditing] = useState<Editing | null>(null)
@@ -72,7 +72,9 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
     const width = Math.max(260, rect.width)
     const left = Math.min(rect.left, window.innerWidth - width - 8)
     setQuery('')
-    setMenu({ left: Math.max(8, left), top: rect.bottom + 4, width })
+    // Cap the height to the room below the button so the menu never runs off-screen.
+    const top = rect.bottom + 4
+    setMenu({ left: Math.max(8, left), top, width, maxHeight: Math.max(120, Math.min(320, window.innerHeight - top - 8)) })
   }
 
   const pick = (f: { id: string; name: string; expression: string }) => {
@@ -139,7 +141,7 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
           ref={menuRef}
           className="fx-menu"
           role="menu"
-          style={{ left: menu.left, top: menu.top, width: menu.width }}
+          style={{ left: menu.left, top: menu.top, width: menu.width, maxHeight: menu.maxHeight }}
           onPointerDown={stop}
           onMouseDown={stop}
           onClick={stop}
@@ -149,6 +151,26 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
             if (e.key === 'Escape') setMenu(null)
           }}
         >
+          <button
+            className="fx-menu__new"
+            role="menuitem"
+            onClick={() => {
+              setEditing({ kind: 'new' })
+              setMenu(null)
+            }}
+          >
+            + New expression…
+          </button>
+          <button
+            className="fx-menu__new"
+            role="menuitem"
+            onClick={() => {
+              setEditing({ kind: 'temporary' })
+              setMenu(null)
+            }}
+          >
+            + Temporary filter…
+          </button>
           {library.length > 0 && (
             <input
               className="fx-menu__search"
@@ -193,26 +215,6 @@ export function CollectionFilterBar({ filter, onChange, nodrag = false }: Collec
               </div>
             ))
           )}
-          <button
-            className="fx-menu__new"
-            role="menuitem"
-            onClick={() => {
-              setEditing({ kind: 'new' })
-              setMenu(null)
-            }}
-          >
-            + New expression…
-          </button>
-          <button
-            className="fx-menu__new"
-            role="menuitem"
-            onClick={() => {
-              setEditing({ kind: 'temporary' })
-              setMenu(null)
-            }}
-          >
-            + Temporary filter…
-          </button>
         </div>,
         document.body,
       )}
