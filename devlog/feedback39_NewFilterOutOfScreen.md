@@ -1,0 +1,1 @@
+looks like the set filter drop down menu goes out of the bottom edge when it is too long, can you move the new filter option be the first one in the drop down menu?
